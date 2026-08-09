@@ -30,14 +30,15 @@ export default defineConfig({
   },
   plugins: [
     esmExternalRequirePlugin({
-      external: [
-        /^react(?:-dom)?(?:\/.*)?$/,
-      ],
+      external: [/^react(?:-dom)?(?:\/.*)?$/],
     }),
     react(),
     tailwindcss(),
     dts({
-      exclude: ['**/*.stories.tsx', '**/*.test.tsx'],
+      // `.ts` as well as `.tsx`: tests sit beside the code they cover, and the
+      // narrower glob was already shipping `phone-input.utils.test.d.ts` to
+      // consumers.
+      exclude: ['**/*.stories.tsx', '**/*.test.ts', '**/*.test.tsx'],
       rollupTypes: false,
       tsconfigPath: './tsconfig.app.json',
     }),

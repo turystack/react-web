@@ -69,8 +69,8 @@
 		"vaul": "^1.1.2"
 	},
 	"peerDependencies": {
-		"@turystack/react-icons": "^1.0.0",
 		"@turystack/react-hooks": "^1.0.0",
+		"@turystack/react-icons": "^1.0.0",
 		"react": ">=19",
 		"react-dom": ">=19",
 		"tailwindcss": ">=4"
@@ -78,8 +78,9 @@
 	"devDependencies": {
 		"@biomejs/biome": "2.5.4",
 		"@tailwindcss/vite": "^4.2.1",
-		"@turystack/react-icons": "^1.0.0",
+		"@testing-library/react": "^16.3.2",
 		"@turystack/react-hooks": "^1.0.0",
+		"@turystack/react-icons": "^1.0.0",
 		"@types/node": "^24.12.0",
 		"@types/react": "19.2.17",
 		"@types/react-dom": "19.2.3",

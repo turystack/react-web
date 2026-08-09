@@ -73,5 +73,6 @@ export * from './components/typography'
 export * from './components/uploader'
 // Hooks
 export * from './hooks/use-disclosure'
+export * from './hooks/use-input-transform'
 export * from './hooks/use-unsaved'
 export * from './hooks/web'
