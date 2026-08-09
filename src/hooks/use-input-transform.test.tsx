@@ -72,6 +72,20 @@ describe('useInputTransform', () => {
     expect(input?.value).toBe('ABC')
   })
 
+  it('holds the transformed value without an onChange', () => {
+    const { result } = renderHook(() =>
+      useInputTransform({
+        transform: group,
+      }),
+    )
+
+    act(() => result.current.setValue('1234'))
+
+    // `onChange` hands the value elsewhere; it is not what stores it.
+    expect(result.current.value).toBe('1.234')
+    expect(result.current.display).toBe('1.234')
+  })
+
   it('emits the transformed value, not what was typed', () => {
     const onChange = vi.fn()
     const { input } = renderField({

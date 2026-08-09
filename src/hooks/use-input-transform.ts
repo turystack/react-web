@@ -85,14 +85,20 @@ function alignCaret(typedPrefix: string, display: string): number {
  * Headless: it owns no markup and renders nothing, so the same hook drives an
  * `input`, a `textarea`, or whatever component forwards a ref to one.
  *
+ * The hook holds the transformed text itself, so `transform` is the only thing
+ * it needs. Read the result off `value` whenever you want it.
+ *
  * ```tsx
- * const upper = useInputTransform({
- *   onChange: (value) => console.log(value),
+ * const code = useInputTransform({
  *   transform: (raw) => raw.toUpperCase(),
  * })
  *
- * <input {...upper.props} />
+ * <input {...code.props} />
+ * // code.value -> "ABC"
  * ```
+ *
+ * `onChange` is for handing the value somewhere else as it changes — a form
+ * library, a parent's state — not for storing it.
  *
  * The caret survives transforms that change length, which is the part that
  * makes this worth a hook rather than an `onChange` one-liner.
