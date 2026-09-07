@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { OTPInput } from './otp-input'
 import type { OTPInputSize } from './otp-input.types'
@@ -10,6 +10,14 @@ beforeAll(() => {
   // `document.elementFromPoint`, which jsdom does not implement; without it the
   // very first focus throws asynchronously and fails the whole run.
   document.elementFromPoint = () => null
+})
+
+afterEach(async () => {
+  // input-otp schedules caret-position timers at 0, 10 and 50ms that call
+  // setState. Testing Library unmounts between tests, but a queued timer still
+  // fires — and if it fires after the environment is torn down, `window` is
+  // gone and vitest reports an unhandled error while every test passed.
+  await new Promise((resolve) => setTimeout(resolve, 60))
 })
 
 function field() {
