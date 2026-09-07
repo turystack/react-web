@@ -2,7 +2,7 @@
   "name": "@turystack/react-web",
   "description": "TuryStack React web component library built with Base UI and shadcn patterns.",
   "private": false,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "packageManager": "pnpm@10.12.3",
   "sideEffects": [
