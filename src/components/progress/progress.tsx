@@ -1,17 +1,25 @@
 import { Progress as ProgressPrimitive } from '@base-ui/react/progress'
+import { useState } from 'react'
 import { tv } from 'tailwind-variants'
 
 import { Label } from '@/components/label'
 
 import type { ProgressProps } from './progress.types'
 
-const progress = tv({
+/**
+ * The indicator declares `w-0` because the headless primitive writes an inline
+ * width only once a percentage is known: with no baseline an indeterminate bar
+ * stretches to the track and reads as complete.
+ */
+const progressStyles = tv({
   defaultVariants: {
     size: 'md',
   },
   slots: {
-    indicator:
-      'progress-indicator h-full bg-primary transition-all duration-300',
+    indicator: [
+      'progress-indicator h-full w-0 bg-primary transition-all duration-300',
+      'data-indeterminate:w-1/3 data-indeterminate:animate-pulse',
+    ],
     label: 'progress-label',
     root: 'progress-root flex w-full flex-col gap-2',
     track:
@@ -38,53 +46,27 @@ function Progress({ value, defaultValue, size, label }: ProgressProps) {
     label: labelCls,
     track,
     indicator,
-  } = progress({
+  } = progressStyles({
     size,
   })
 
-  const labelText = typeof label === 'string' ? label : label?.content
-  const labelExtras = typeof label === 'object' && label !== null ? label : {}
+  const [uncontrolledValue] = useState<number | null>(defaultValue ?? null)
+  const { content: labelText, ...labelProps } =
+    typeof label === 'string'
+      ? {
+          content: label,
+        }
+      : (label ?? {})
 
   return (
     <ProgressPrimitive.Root
       className={root()}
       data-testid="progress-root"
-      value={value ?? defaultValue ?? null}
+      value={value ?? uncontrolledValue}
     >
       {labelText && (
         <div className={labelCls()} data-testid="progress-label">
-          <Label
-            disabled={
-              (
-                labelExtras as {
-                  disabled?: boolean
-                }
-              ).disabled
-            }
-            optional={
-              (
-                labelExtras as {
-                  optional?: boolean
-                }
-              ).optional
-            }
-            required={
-              (
-                labelExtras as {
-                  required?: boolean
-                }
-              ).required
-            }
-            tooltip={
-              (
-                labelExtras as {
-                  tooltip?: React.ReactNode
-                }
-              ).tooltip
-            }
-          >
-            {labelText}
-          </Label>
+          <Label {...labelProps}>{labelText}</Label>
         </div>
       )}
       <ProgressPrimitive.Track className={track()} data-testid="progress-track">
@@ -97,4 +79,4 @@ function Progress({ value, defaultValue, size, label }: ProgressProps) {
   )
 }
 
-export { Progress }
+export { Progress, progressStyles }

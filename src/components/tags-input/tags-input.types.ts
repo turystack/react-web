@@ -9,6 +9,7 @@
  * - Tags render as Badge components with remove (X) button
  * - maxTags limits the number of tags allowed
  * - allowDuplicates controls whether duplicate values are permitted
+ * - A refused entry stays in the field and is reported through onReject
  * - Tags and input render in a flex-wrap container
  * - Controlled (value/onChange) and uncontrolled (defaultValue) patterns
  *
@@ -22,13 +23,16 @@
 
 import type { InputProps } from '@/components/input/input.types'
 
+export type TagsInputRejectReason = 'duplicate' | 'max-tags'
+
 export type TagsInputProps = Omit<
   InputProps,
-  'value' | 'defaultValue' | 'onChange'
+  'value' | 'defaultValue' | 'onChange' | 'debounce'
 > & {
   value?: string[] // controlled list of tags
   defaultValue?: string[] // uncontrolled initial tags
   maxTags?: number // maximum number of tags allowed
   allowDuplicates?: boolean // whether duplicate tags are permitted
   onChange?: (value: string[]) => void // fires when tags change
+  onReject?: (value: string, reason: TagsInputRejectReason) => void // fires when an entry is refused
 }

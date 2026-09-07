@@ -8,6 +8,8 @@
  * - Clicking a trigger activates its associated content panel
  * - Active trigger shows an underline by default
  * - Justified layout stretches triggers to equal width
+ * - Block layout stretches the rail to 100% width and leaves the triggers at
+ *   their natural content width; it is mutually exclusive with justified
  * - Orientation: horizontal (default) or vertical
  * - Trigger supports an icon before the label
  * - Focus ring on keyboard navigation
@@ -16,6 +18,7 @@
  * - Use Base UI Tabs primitive for accessibility (keyboard nav, ARIA roles)
  * - List renders as line navigation by default
  * - Use variant="pill" for the previous segmented style
+ * - block and justified are a discriminated union: the compiler rejects both
  * - <Tabs value={tab} onChange={setTab}>
  *     <Tabs.List>
  *       <Tabs.Trigger value="a" icon={<Icon />}>Tab A</Tabs.Trigger>
@@ -31,18 +34,26 @@
 export type TabsOrientation = 'horizontal' | 'vertical'
 export type TabsVariant = 'line' | 'pill'
 
-export type TabsProps = {
+export type TabsLayoutProps =
+  | {
+      block?: false // rail keeps the width its layout gives it
+      justified?: boolean // stretches tabs to fill available width; default true
+    }
+  | {
+      block: true // rail spans 100% width, triggers keep their natural width
+      justified?: false // block already owns the width; justified is refused
+    }
+
+export type TabsProps = TabsLayoutProps & {
   orientation?: TabsOrientation // layout direction for tab list
   variant?: TabsVariant // visual style; default line
-  justified?: boolean // stretches tabs to fill available width by default
   value?: string // controlled active tab
   defaultValue?: string // uncontrolled initial tab
   onChange?: (value: string) => void // fires when active tab changes
 }
 
-export type TabsListProps = {
+export type TabsListProps = TabsLayoutProps & {
   variant?: TabsVariant // optional per-list visual override
-  justified?: boolean // stretches tabs to fill available width
 }
 
 export type TabsTriggerProps = {

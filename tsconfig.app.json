@@ -24,6 +24,5 @@
     "useDefineForClassFields": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src", "tests"],
-  "exclude": ["src/**/*.stories.tsx"]
+  "include": ["src", "tests"]
 }

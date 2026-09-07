@@ -7,16 +7,19 @@
  * Behavior:
  * - Thumb slides horizontally on toggle (translateX via data-state)
  * - Three sizes: sm, md, lg (thumb and track scale accordingly)
- * - Bordered variant wraps switch + label in a bordered clickable container
+ * - Bordered variant wraps switch + label in a bordered container
  * - Label and description render beside the switch
- * - Inherits WithLabelProps for flexible label configuration
+ * - Clicking the label toggles the switch; the description is announced as the
+ *   switch's description, not as part of its name
+ * - Inherits WithLabelProps for flexible label configuration; label.htmlFor
+ *   names the control instead of pointing the label somewhere else
  *
  * Implementation:
- * - Use Radix UI Switch primitive for accessibility
- * - data-[state=checked]:translate-x-{N} for thumb animation
+ * - Base UI Switch primitive for accessibility
+ * - data-checked:translate-x-{N} for thumb animation
  * - <Switch label="Dark mode" size="md" checked={on} onCheckedChange={setOn} />
  *
- * Dependencies: @radix-ui/react-switch
+ * Dependencies: @base-ui/react/switch, Label component (WithLabelProps)
  */
 
 import type { WithLabelProps } from '@/components/label'

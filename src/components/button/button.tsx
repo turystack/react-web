@@ -25,28 +25,30 @@ function Button({
   type = 'button',
   form,
   className,
+  'data-testid': testId = 'button',
   onClick,
 }: PropsWithChildren<ButtonProps>) {
+  const child =
+    asChild && isValidElement(children)
+      ? (children as ReactElement<{ children?: ReactNode }>)
+      : undefined
+  const label = child ? child.props.children : children
   const content = (
     <>
-      {loading ? <Loader2 className="animate-spin" /> : leftSection}
-      {children}
+      {loading ? (
+        <Loader2 className="button-spinner animate-spin" />
+      ) : (
+        leftSection
+      )}
+      {label}
       {rightSection}
     </>
   )
-  const renderAsChild = asChild && isValidElement(children)
-  const render = renderAsChild
-    ? cloneElement(
-        children as ReactElement<{
-          children?: ReactNode
-        }>,
-        undefined,
-        content,
-      )
-    : undefined
+  const render = child ? cloneElement(child, undefined, content) : undefined
 
   return (
     <ButtonPrimitive
+      aria-busy={loading}
       aria-label={ariaLabel}
       className={buttonShared({
         block,
@@ -55,15 +57,15 @@ function Button({
         variant,
       })}
       data-slot="button"
-      data-testid="button"
+      data-testid={testId}
       disabled={disabled || loading}
       form={form}
-      nativeButton={!renderAsChild}
+      nativeButton={!child}
       onClick={onClick}
       render={render}
       type={type}
     >
-      {renderAsChild ? undefined : content}
+      {child ? undefined : content}
     </ButtonPrimitive>
   )
 }

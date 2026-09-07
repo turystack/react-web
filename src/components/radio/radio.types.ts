@@ -13,7 +13,8 @@
  *
  * Implementation:
  * - Uses Base UI Radio and RadioGroup primitives
- * - Individual Radio must be used inside a Radio.Group
+ * - A standalone Radio is controlled with `checked` or uncontrolled with `defaultChecked`
+ * - <Radio defaultChecked label="Send me updates" />
  * - <Radio.Group items={options} value={selected} variant="vertical" onChange={setSelected} />
  *
  * Dependencies: @base-ui/react/radio, @base-ui/react/radio-group
@@ -33,6 +34,7 @@ export type RadioProps = {
   disabled?: boolean // prevents interaction
   bordered?: boolean // adds border around radio wrapper
   checked?: boolean // controlled checked state (standalone only)
+  defaultChecked?: boolean // uncontrolled initial state (standalone only)
   onChange?: (checked: boolean) => void // fires on toggle (standalone only)
 }
 

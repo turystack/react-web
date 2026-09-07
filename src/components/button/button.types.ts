@@ -47,6 +47,7 @@ export type ButtonVariant =
 
 export type ButtonProps = {
   ariaLabel?: string // accessible name for icon-only buttons
+  'data-testid'?: string // testing handle; defaults to "button"
   form?: string // associates button with a form by id
   type?: ButtonType // HTML button type attribute
   size?: ButtonSize // visual size variant

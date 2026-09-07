@@ -2,6 +2,7 @@ import { Dialog } from '@base-ui/react/dialog'
 import type { MouseEvent, PropsWithChildren } from 'react'
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
+import { usePortalContainer } from '@/components/portal-provider'
 import { X } from '@/internal/icons'
 
 import type {
@@ -36,7 +37,8 @@ const styles = tv({
     header: 'modal-header flex items-start justify-between gap-2 p-5',
     headerContent: 'modal-header-content flex flex-col gap-1',
     popup: [
-      'modal-popup fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-full',
+      'modal-popup fixed top-1/2 left-1/2 z-50 flex',
+      'max-h-[90vh] w-full',
       '-translate-x-1/2 -translate-y-1/2 flex-col rounded-xl bg-popover',
       'text-popover-foreground shadow-xl outline-none ring-1 ring-foreground/10',
       'data-open:fade-in-0 data-open:zoom-in-95 duration-100 data-open:animate-in',
@@ -82,6 +84,7 @@ function ModalRoot({
   size,
   children,
 }: PropsWithChildren<ModalProps>) {
+  const portalContainer = usePortalContainer()
   const { backdrop, popup } = styles({
     size,
   })
@@ -91,8 +94,13 @@ function ModalRoot({
   }
 
   return (
-    <Dialog.Root onOpenChange={onChange} open={open}>
-      <Dialog.Portal>
+    <Dialog.Root
+      onOpenChange={
+        onChange ? (nextOpen: boolean) => onChange(nextOpen) : undefined
+      }
+      open={open}
+    >
+      <Dialog.Portal container={portalContainer}>
         <Dialog.Backdrop
           className={backdrop()}
           data-testid="modal-backdrop"
@@ -127,7 +135,7 @@ function ModalHeader({
           render={<Button size="icon-sm" variant="ghost" />}
         >
           <X />
-          <span className="sr-only">Close</span>
+          <span className="modal-close-label sr-only">Close</span>
         </Dialog.Close>
       )}
     </div>

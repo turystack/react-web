@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { tv } from 'tailwind-variants'
 import { DropdownMenu } from '@/components/dropdown-menu'
 import { MaskInput } from '@/components/mask-input'
-import { ChevronsUpDown } from '@/internal/icons'
+import { ChevronDown } from '@/internal/icons'
 
 import { buttonShared } from '../button/button.shared'
 import type { InputSize } from '../input/input.types'
@@ -25,15 +25,18 @@ const PLACEHOLDERS: Record<Exclude<DocumentType, 'any'>, string> = {
 }
 
 const rootStyles = tv({
-  base: 'flex',
+  base: 'document-input-root flex',
 })
 
 const triggerStyles = tv({
-  base: buttonShared({
-    className:
-      'rounded-s-lg rounded-e-none border-r-0 bg-transparent px-3 focus:z-10 aria-expanded:border-ring aria-expanded:ring-3 aria-expanded:ring-ring/50 data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/50 dark:bg-input/30',
-    variant: 'outline',
-  }),
+  base: [
+    'document-input-trigger',
+    buttonShared({
+      className:
+        'rounded-s-lg rounded-e-none border-r-0 bg-transparent px-3 focus:z-10 aria-expanded:border-ring aria-expanded:ring-3 aria-expanded:ring-ring/50 data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/50 dark:bg-input/30',
+      variant: 'outline',
+    }),
+  ],
   defaultVariants: {
     size: 'md',
   },
@@ -47,8 +50,14 @@ const triggerStyles = tv({
 })
 
 const inputFieldStyles = tv({
-  base: 'rounded-s-none rounded-e-lg',
+  base: 'document-input-field rounded-s-none rounded-e-lg',
 })
+
+function maskedType(
+  type: DocumentType | undefined,
+): Exclude<DocumentType, 'any'> | undefined {
+  return type === 'cpf' || type === 'cnpj' ? type : undefined
+}
 
 function DocumentInput({
   variant,
@@ -64,15 +73,20 @@ function DocumentInput({
     Exclude<DocumentType, 'any'>
   >(
     variant === 'any'
-      ? ((value?.type ?? defaultValue?.type ?? 'cpf') as Exclude<
-          DocumentType,
-          'any'
-        >)
+      ? (maskedType(value?.type) ?? maskedType(defaultValue?.type) ?? 'cpf')
       : variant,
   )
 
-  const activeType = variant === 'any' ? internalType : variant
+  const controlledType = maskedType(value?.type)
+  const activeType =
+    variant === 'any' ? (controlledType ?? internalType) : variant
   const mask = MASKS[activeType]
+
+  /**
+   * `value?.number` alone would read a controlled `null` as "uncontrolled" and
+   * let MaskInput fall back to its own state, so the two are told apart here.
+   */
+  const maskValue = value === undefined ? undefined : (value?.number ?? null)
 
   const handleChange = (number: string | null) => {
     if (!number) {
@@ -101,7 +115,7 @@ function DocumentInput({
         onChange={handleChange}
         placeholder={props.placeholder ?? PLACEHOLDERS[activeType]}
         size={size}
-        value={value?.number ?? undefined}
+        value={maskValue}
       />
     )
   }
@@ -122,14 +136,14 @@ function DocumentInput({
             disabled={disabled}
             type="button"
           >
-            {LABELS[internalType]}
-            <ChevronsUpDown className="size-4 opacity-50" />
+            {LABELS[activeType]}
+            <ChevronDown className="document-input-trigger-icon size-4 opacity-50" />
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content sideOffset={4} width={100}>
           {(['cpf', 'cnpj'] as const).map((type) => (
             <DropdownMenu.CheckboxItem
-              checked={internalType === type}
+              checked={activeType === type}
               key={type}
               onCheckedChange={() => handleTypeChange(type)}
             >
@@ -147,7 +161,7 @@ function DocumentInput({
         onChange={handleChange}
         placeholder={props.placeholder ?? PLACEHOLDERS[activeType]}
         size={size}
-        value={value?.number ?? undefined}
+        value={maskValue}
       />
     </div>
   )

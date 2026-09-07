@@ -12,12 +12,14 @@ import type {
 } from './tabs.types'
 
 type TabsContextValue = {
+  block: boolean
   justified: boolean
   orientation: TabsOrientation
   variant: TabsVariant
 }
 
 const TabsContext = createContext<TabsContextValue>({
+  block: false,
   justified: true,
   orientation: 'horizontal',
   variant: 'line',
@@ -25,6 +27,13 @@ const TabsContext = createContext<TabsContextValue>({
 
 const tabs = tv({
   compoundVariants: [
+    {
+      block: true,
+      class: {
+        list: 'w-full',
+      },
+      justified: false,
+    },
     {
       class: {
         list: 'border-r border-b-0',
@@ -42,6 +51,7 @@ const tabs = tv({
     },
   ],
   defaultVariants: {
+    block: false,
     justified: true,
     orientation: 'horizontal',
     variant: 'line',
@@ -54,6 +64,11 @@ const tabs = tv({
       'tabs-trigger relative inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap font-medium text-muted-foreground text-sm outline-none transition-all hover:text-foreground focus-visible:border-ring focus-visible:outline-1 focus-visible:outline-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-disabled:pointer-events-none data-active:text-foreground data-disabled:opacity-50 dark:text-muted-foreground dark:data-active:text-foreground dark:hover:text-foreground [&_svg:not([class*=size-])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0',
   },
   variants: {
+    block: {
+      true: {
+        list: 'w-full',
+      },
+    },
     justified: {
       false: {
         list: 'w-fit',
@@ -90,6 +105,7 @@ const tabs = tv({
 })
 
 function TabsRoot({
+  block = false,
   orientation = 'horizontal',
   variant = 'line',
   justified = true,
@@ -105,7 +121,8 @@ function TabsRoot({
   return (
     <TabsContext.Provider
       value={{
-        justified,
+        block,
+        justified: block ? false : justified,
         orientation,
         variant,
       }}
@@ -125,14 +142,19 @@ function TabsRoot({
 }
 
 function TabsList({
+  block,
   justified,
   variant,
   children,
 }: PropsWithChildren<TabsListProps>) {
   const context = useContext(TabsContext)
-  const resolvedJustified = justified ?? context.justified
+  const resolvedBlock = block ?? context.block
+  const resolvedJustified = resolvedBlock
+    ? false
+    : (justified ?? context.justified)
   const resolvedVariant = variant ?? context.variant
   const { list } = tabs({
+    block: resolvedBlock,
     justified: resolvedJustified,
     orientation: context.orientation,
     variant: resolvedVariant,
@@ -142,11 +164,17 @@ function TabsList({
     <TabsContext.Provider
       value={{
         ...context,
+        block: resolvedBlock,
         justified: resolvedJustified,
         variant: resolvedVariant,
       }}
     >
-      <TabsPrimitive.List className={list()} data-testid="tabs-list">
+      <TabsPrimitive.List
+        className={list()}
+        data-block={resolvedBlock}
+        data-justified={resolvedJustified}
+        data-testid="tabs-list"
+      >
         {children}
       </TabsPrimitive.List>
     </TabsContext.Provider>
@@ -161,6 +189,7 @@ function TabsTrigger({
 }: PropsWithChildren<TabsTriggerProps>) {
   const context = useContext(TabsContext)
   const { trigger } = tabs({
+    block: context.block,
     justified: context.justified,
     orientation: context.orientation,
     variant: context.variant,

@@ -6,7 +6,7 @@
  *
  * Behavior:
  * - Single mode: displays formatted currency value (e.g. R$ 1.234,56)
- * - "any" variant: renders a dropdown to select currency (BRL/USD/EUR)
+ * - "any" variant: renders a dropdown to select currency (BRL/USD/EUR), single mode only
  * - Range mode: opens a popover with two inputs (from/to) and confirm/cancel buttons
  * - Formatting uses Intl.NumberFormat based on currency locale
  * - Parsing strips non-digits, divides by 100 for decimal placement
@@ -38,12 +38,11 @@ export type CurrencyInputRangeValue = {
 type CurrencyInputBaseProps = Omit<
   InputProps,
   'value' | 'defaultValue' | 'onChange' | 'variant'
-> & {
-  variant?: CurrencyVariant // currency type determines symbol/formatting
-}
+>
 
 export type CurrencyInputSingleProps = CurrencyInputBaseProps & {
   mode?: 'single'
+  variant?: CurrencyVariant // currency type determines symbol/formatting
   value?: number | null // controlled value in integer cents
   defaultValue?: number | null // uncontrolled initial value in integer cents
   onChange?: (value: number | null) => void // fires with integer cents
@@ -51,6 +50,7 @@ export type CurrencyInputSingleProps = CurrencyInputBaseProps & {
 
 export type CurrencyInputRangeProps = CurrencyInputBaseProps & {
   mode: 'range'
+  variant?: Currency // currency the bounds are read and shown in
   value?: CurrencyInputRangeValue | null // controlled from/to values in integer cents
   defaultValue?: CurrencyInputRangeValue | null // uncontrolled initial range in integer cents
   onChange?: (value: CurrencyInputRangeValue | null) => void // fires on confirm

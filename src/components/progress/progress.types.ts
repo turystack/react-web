@@ -5,17 +5,19 @@
  * Shows completion percentage via animated indicator width.
  *
  * Behavior:
- * - Value (0-100) controls indicator width via CSS transform translateX
+ * - Value (0-100) controls indicator width
+ * - No value at all is indeterminate: a short pulsing segment, never a full bar
+ * - defaultValue is read once, on mount; value takes over whenever it is given
  * - Size variants: sm (8px), md (16px), lg (24px) bar height
  * - Label prop adds text above the bar (inherits WithLabelProps)
  * - Smooth transition on value changes
  *
  * Implementation:
- * - Use Radix UI Progress primitive for accessibility (role="progressbar")
- * - Indicator uses transform: translateX(-(100-value)%) for width animation
+ * - Base UI Progress primitive for accessibility (role="progressbar")
+ * - Indicator carries a zero-width baseline the primitive's inline width beats
  * - <Progress value={65} size="md" label="Upload progress" />
  *
- * Dependencies: @radix-ui/react-progress, Label component (WithLabelProps)
+ * Dependencies: @base-ui/react/progress, Label component (WithLabelProps)
  */
 
 import type { WithLabelProps } from '@/components/label'

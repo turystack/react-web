@@ -8,13 +8,14 @@
  * - Renders as <nav> with <ol>/<li> structure for accessibility
  * - Separator (ChevronRight by default) auto-inserted between items
  * - Link is clickable (navigable), Page represents current location
- * - Ellipsis renders a "..." button for collapsed middle items
+ * - Ellipsis renders a named "..." mark standing in for collapsed middle items
  * - Link supports asChild for integration with routing libraries
  *
  * Implementation:
  * - Semantic: <nav aria-label="breadcrumb"> > <ol> > <li> items
  * - Page gets aria-current="page", Separator gets aria-hidden="true"
- * - Radix Slot for asChild on Link
+ * - Ellipsis is announced (role="img" + a name from the labels provider)
+ * - asChild on Link clones the child and merges its class onto it
  * - <Breadcrumb>
  *     <Breadcrumb.List>
  *       <Breadcrumb.Item><Breadcrumb.Link href="/">Home</Breadcrumb.Link></Breadcrumb.Item>

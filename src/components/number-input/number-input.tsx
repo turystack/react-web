@@ -17,7 +17,7 @@ const numberInput = tv({
       'disabled:pointer-events-none disabled:opacity-50',
     ],
     field: [
-      'w-full min-w-0 border-none bg-transparent',
+      'number-input-field w-full min-w-0 border-none bg-transparent',
       'px-2.5 py-1 text-center text-base outline-none md:text-sm',
       'placeholder:text-muted-foreground',
       'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
@@ -95,7 +95,7 @@ function NumberInput({
   return (
     <div className={root()} data-testid="number-input-root">
       <NumberField.Root
-        className="w-full"
+        className="number-input-control w-full"
         defaultValue={defaultValue ?? undefined}
         disabled={disabled}
         format={resolvedFormat}

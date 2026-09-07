@@ -8,7 +8,7 @@
  * - Trigger click toggles the associated content panel
  * - Single mode: opening one item automatically closes others
  * - Multiple mode: items toggle independently
- * - Collapsible prop (single mode) allows closing the last open item
+ * - Collapsible prop (single mode, default true) allows closing the last open item
  * - Chevron icon rotates 180° on open via data-state attribute
  * - Content animates height from 0 to auto on expand
  *
@@ -34,8 +34,8 @@ type SingleAccordionProps = {
   type: 'single'
   value?: string // controlled: currently open item value
   defaultValue?: string // uncontrolled: initially open item value
-  collapsible?: boolean // whether the open item can be collapsed
-  onChange?: (value: string) => void // fires when open item changes
+  collapsible?: boolean // whether the open item can be collapsed (default true)
+  onChange?: (value: string | null) => void // fires when open item changes, null once nothing is open
 }
 
 type MultipleAccordionProps = {

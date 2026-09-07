@@ -6,18 +6,20 @@
  *
  * Behavior:
  * - Displays as inline-flex, rounded-full pill shape
- * - Loading state: content becomes invisible, spinner overlays center
+ * - Loading state: content becomes invisible, spinner overlays center, clicks blocked
  * - Variants: default (primary bg), secondary, destructive (red), outline (border only)
+ * - Sizes: sm, md (default), lg — height, padding, type scale and icon/spinner size
  * - Block mode makes badge full-width
- * - asChild enables polymorphic rendering via Radix Slot
+ * - onClick turns the badge into a button, so it is reachable by keyboard
+ * - asChild renders the badge onto its single child element instead of a span
  *
  * Implementation:
- * - Use class-variance-authority (cva) or tailwind-variants for variant styling
- * - Radix UI Slot for asChild polymorphism
+ * - tailwind-variants for variant styling
+ * - asChild clones the child and puts the badge content inside it
  * - Loading renders Loader component absolutely centered over invisible children
  * - <Badge variant="destructive" loading>Error</Badge>
  *
- * Dependencies: @radix-ui/react-slot, @turystack/react-icons (Loader2 for loading)
+ * Dependencies: @turystack/react-icons (Loader2 for loading)
  */
 
 export type BadgeVariant =
@@ -39,11 +41,14 @@ export type BadgeVariant =
 
 export type BadgeAlign = 'start' | 'center' | 'end'
 
+export type BadgeSize = 'sm' | 'md' | 'lg'
+
 export type BadgeProps = {
   variant?: BadgeVariant // visual style variant
   align?: BadgeAlign // text alignment inside the badge
+  size?: BadgeSize // visual size variant; default md
   block?: boolean // makes badge full-width
   loading?: boolean // shows loading state
-  asChild?: boolean // render as child element via Slot
-  onClick?: React.MouseEventHandler<HTMLDivElement> // click handler
+  asChild?: boolean // renders the badge onto its single child element
+  onClick?: React.MouseEventHandler<HTMLElement> // click handler
 }

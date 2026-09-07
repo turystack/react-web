@@ -1,4 +1,5 @@
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch'
+import { useId } from 'react'
 import { tv } from 'tailwind-variants'
 
 import { Label } from '@/components/label'
@@ -12,6 +13,9 @@ const switchStyles = tv({
   slots: {
     content: 'switch-content flex flex-col gap-0.5',
     description: 'switch-description text-muted-foreground text-sm',
+    // The label is the only text that toggles the switch, so it is the only
+    // text that may claim the pointer — the wrapper and the description do not.
+    label: 'switch-label cursor-pointer',
     root: [
       'switch-root group/switch relative inline-flex shrink-0 cursor-pointer items-center',
       'rounded-full border border-transparent outline-none transition-all',
@@ -24,7 +28,7 @@ const switchStyles = tv({
       'data-checked:translate-x-[calc(100%-2px)] data-unchecked:translate-x-0',
       'dark:data-checked:bg-primary-foreground dark:data-unchecked:bg-foreground',
     ],
-    wrapper: 'switch-wrapper flex cursor-pointer items-center gap-3',
+    wrapper: 'switch-wrapper flex items-center gap-3',
   },
   variants: {
     bordered: {
@@ -73,25 +77,47 @@ function Switch({
     thumb,
     content,
     description: descCls,
+    label: labelCls,
   } = switchStyles({
     bordered,
     hasDescription,
     size,
   })
 
-  const labelText = typeof label === 'string' ? label : label?.content
-  const labelExtras = typeof label === 'object' && label !== null ? label : {}
+  const {
+    content: labelText,
+    disabled: labelDisabled,
+    htmlFor,
+    ...labelProps
+  } = typeof label === 'string'
+    ? {
+        content: label,
+      }
+    : (label ?? {})
+
+  const generatedId = useId()
+  const controlId = htmlFor ?? generatedId
+  const descriptionId = `${controlId}-description`
   const hasContent = Boolean(labelText || description)
 
+  // The wrapper cannot be a <label>: Label renders one of its own, and a label
+  // nested inside a label is inert — the click on the visible text never
+  // reaches the control.
   return (
-    <label className={wrapper()} data-testid="switch-wrapper">
+    <div className={wrapper()} data-testid="switch-wrapper">
       <SwitchPrimitive.Root
+        aria-describedby={description ? descriptionId : undefined}
         checked={checked}
         className={root()}
         data-testid="switch-root"
         defaultChecked={defaultChecked}
         disabled={disabled}
-        onCheckedChange={onCheckedChange}
+        id={controlId}
+        onCheckedChange={
+          onCheckedChange
+            ? (nextChecked: boolean) => onCheckedChange(nextChecked)
+            : undefined
+        }
         value={value}
       >
         <SwitchPrimitive.Thumb className={thumb()} data-testid="switch-thumb" />
@@ -100,54 +126,28 @@ function Switch({
         <div className={content()} data-testid="switch-content">
           {labelText && (
             <Label
-              disabled={
-                disabled ??
-                (
-                  labelExtras as {
-                    disabled?: boolean
-                  }
-                ).disabled
-              }
-              htmlFor={
-                (
-                  labelExtras as {
-                    htmlFor?: string
-                  }
-                ).htmlFor
-              }
-              optional={
-                (
-                  labelExtras as {
-                    optional?: boolean
-                  }
-                ).optional
-              }
-              required={
-                (
-                  labelExtras as {
-                    required?: boolean
-                  }
-                ).required
-              }
-              tooltip={
-                (
-                  labelExtras as {
-                    tooltip?: React.ReactNode
-                  }
-                ).tooltip
-              }
+              {...labelProps}
+              className={labelCls({
+                className: labelProps.className,
+              })}
+              disabled={disabled ?? labelDisabled}
+              htmlFor={controlId}
             >
               {labelText}
             </Label>
           )}
           {description && (
-            <span className={descCls()} data-testid="switch-description">
+            <span
+              className={descCls()}
+              data-testid="switch-description"
+              id={descriptionId}
+            >
               {description}
             </span>
           )}
         </div>
       )}
-    </label>
+    </div>
   )
 }
 

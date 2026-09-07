@@ -1,6 +1,8 @@
 import type { CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { Toaster as Sonner, toast } from 'sonner'
 import { tv } from 'tailwind-variants'
+import { useResolvedPortalContainer } from '@/components/portal-provider'
 import {
   CircleCheckIcon,
   InfoIcon,
@@ -20,28 +22,28 @@ const toastStyles = tv({
     description:
       'toast-description !font-medium !text-sm !text-muted-foreground',
     icon: 'toast-icon',
+    item: 'toast-item',
     title: 'toast-title font-medium text-sm',
-    toast: 'toast-item',
   },
   variants: {
     variant: {
       default: {
-        toast: 'toast-default',
+        item: 'toast-default',
       },
       error: {
-        toast: 'toast-error !border-l-4 !border-l-destructive',
+        item: 'toast-error !border-l-4 !border-l-destructive',
       },
       info: {
-        toast: 'toast-info !border-l-4 !border-l-blue-500',
+        item: 'toast-info !border-l-4 !border-l-blue-500',
       },
       loading: {
-        toast: 'toast-loading',
+        item: 'toast-loading',
       },
       success: {
-        toast: 'toast-success !border-l-4 !border-l-emerald-500',
+        item: 'toast-success !border-l-4 !border-l-emerald-500',
       },
       warning: {
-        toast: 'toast-warning !border-l-4 !border-l-amber-500',
+        item: 'toast-warning !border-l-4 !border-l-amber-500',
       },
     },
   },
@@ -72,16 +74,20 @@ const warningSlots = toastStyles({
 })
 
 function Toast({ position = 'top-center', theme = 'system' }: ToastProps) {
-  return (
+  const container = useResolvedPortalContainer()
+
+  const toaster = (
     <Sonner
       className={toastRoot()}
       data-testid="toast"
       icons={{
-        error: <OctagonXIcon className="size-4" />,
-        info: <InfoIcon className="size-4" />,
-        loading: <Loader2Icon className="size-4 animate-spin" />,
-        success: <CircleCheckIcon className="size-4" />,
-        warning: <TriangleAlertIcon className="size-4" />,
+        error: <OctagonXIcon className="toast-icon-error size-4" />,
+        info: <InfoIcon className="toast-icon-info size-4" />,
+        loading: (
+          <Loader2Icon className="toast-icon-loading size-4 animate-spin" />
+        ),
+        success: <CircleCheckIcon className="toast-icon-success size-4" />,
+        warning: <TriangleAlertIcon className="toast-icon-warning size-4" />,
       }}
       position={position}
       style={
@@ -100,18 +106,24 @@ function Toast({ position = 'top-center', theme = 'system' }: ToastProps) {
           closeButton: baseSlots.closeButton(),
           content: baseSlots.content(),
           description: baseSlots.description(),
-          error: errorSlots.toast(),
+          error: errorSlots.item(),
           icon: baseSlots.icon(),
-          info: infoSlots.toast(),
-          loading: loadingSlots.toast(),
-          success: successSlots.toast(),
+          info: infoSlots.item(),
+          loading: loadingSlots.item(),
+          success: successSlots.item(),
           title: baseSlots.title(),
-          toast: baseSlots.toast(),
-          warning: warningSlots.toast(),
+          toast: baseSlots.item(),
+          warning: warningSlots.item(),
         },
       }}
     />
   )
+
+  // Sonner renders where it is mounted, and the provider mounts it at the app
+  // root. An app that scopes this library to a subtree — a themed panel, a docs
+  // surface — has its tokens and its font resolved outside that subtree, so the
+  // toast came out in the host's colours while every other surface obeyed.
+  return container ? createPortal(toaster, container) : toaster
 }
 
 export { Toast, toast }

@@ -1,12 +1,29 @@
 import { Popover } from '@base-ui/react/popover'
 import { Select as SelectPrimitive } from '@base-ui/react/select'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useDebounceCallback } from '@turystack/react-hooks'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { tv } from 'tailwind-variants'
 import { Badge } from '@/components/badge'
+import { Button } from '@/components/button'
+import { EmptyState } from '@/components/empty-state'
+import { DEBOUNCE_MS } from '@/components/input/input.shared'
+import { useLabels } from '@/components/labels-provider'
 import { Loader } from '@/components/loader'
-import { Check, ChevronDown, ChevronUp, Search, X } from '@/internal/icons'
+import { usePortalContainer } from '@/components/portal-provider'
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Search,
+  X,
+} from '@/internal/icons'
 
-import type { SelectProps } from './select.types'
+import type {
+  SelectCreatableOptions,
+  SelectInfiniteProps,
+  SelectProps,
+} from './select.types'
 
 const SELECT_POPUP_OFFSET = 8
 
@@ -16,6 +33,15 @@ const select = tv({
     variant: 'default',
   },
   slots: {
+    create: [
+      'select-create flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2',
+      'select-none text-left text-sm outline-none',
+      'hover:bg-accent hover:text-accent-foreground',
+      'focus-visible:bg-accent focus-visible:text-accent-foreground',
+      'focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
+      'disabled:pointer-events-none disabled:opacity-50',
+    ],
+    createLabel: 'select-create-label min-w-0 flex-1 truncate',
     checkbox: [
       'select-checkbox flex size-4 items-center justify-center rounded border border-input transition-colors',
       'data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground',
@@ -31,6 +57,8 @@ const select = tv({
       'select-item relative flex min-h-9 cursor-pointer items-center gap-2 rounded-md py-2 pr-8 pl-2.5',
       'select-none text-sm outline-none',
       'hover:bg-accent hover:text-accent-foreground',
+      'focus-visible:bg-accent focus-visible:text-accent-foreground',
+      'focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
       'data-highlighted:bg-accent data-highlighted:text-accent-foreground',
       'data-disabled:pointer-events-none data-disabled:opacity-50',
       'data-current:font-medium',
@@ -120,13 +148,9 @@ function useSearchChange(
   onSearchChange: ((query: string) => void) | undefined,
   debounce: boolean | undefined,
 ) {
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
-
-  useEffect(
-    () => () => {
-      clearTimeout(timerRef.current)
-    },
-    [],
+  const emitDebounced = useDebounceCallback(
+    (query: string) => onSearchChange?.(query),
+    DEBOUNCE_MS,
   )
 
   return useCallback(
@@ -138,21 +162,261 @@ function useSearchChange(
         onSearchChange(query)
         return
       }
-      clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => onSearchChange(query), 300)
+      emitDebounced(query)
     },
-    [debounce, onSearchChange],
+    [debounce, emitDebounced, onSearchChange],
   )
 }
 
+/**
+ * Whether the query on screen is worth offering as a new option, and what
+ * happens when the offer is taken.
+ *
+ * The offer is withheld while an option already carries that label, because a
+ * list that offers to create the row sitting right under it is asking the
+ * reader to make a duplicate. `allowDuplicates` is for the caller who really
+ * does keep two things of the same name.
+ */
+function useCreatable<T>({
+  creatable,
+  creatableOptions,
+  labelOf,
+  options,
+  query,
+  onCreated,
+}: {
+  creatable: boolean | undefined
+  creatableOptions: SelectCreatableOptions | undefined
+  labelOf: (option: T) => string
+  options: T[]
+  query: string
+  onCreated: () => void
+}) {
+  const [creating, setCreating] = useState(false)
+  const trimmed = query.trim()
+  const minLength = creatableOptions?.minLength ?? 1
+
+  const taken = options.some(
+    (option) => labelOf(option).toLowerCase() === trimmed.toLowerCase(),
+  )
+
+  const offered =
+    Boolean(creatable) &&
+    trimmed.length >= minLength &&
+    trimmed.length > 0 &&
+    (creatableOptions?.allowDuplicates === true || !taken)
+
+  const create = async () => {
+    if (creating) {
+      return
+    }
+
+    setCreating(true)
+    try {
+      await Promise.resolve(creatableOptions?.onCreate?.(trimmed))
+    } finally {
+      setCreating(false)
+    }
+    onCreated()
+  }
+
+  return {
+    create,
+    creating,
+    offered,
+    position: creatableOptions?.position ?? 'top',
+    query: trimmed,
+  }
+}
+
+function SelectCreateRow({
+  className,
+  labelClassName,
+  creating,
+  onCreate,
+  query,
+  text,
+}: {
+  className: string
+  labelClassName: string
+  creating: boolean
+  onCreate: () => void
+  query: string
+  text: (query: string) => string
+}) {
+  return (
+    <button
+      className={className}
+      data-testid="select-create"
+      disabled={creating}
+      onClick={onCreate}
+      type="button"
+    >
+      {creating ? (
+        <Loader decorative size="sm" />
+      ) : (
+        <Plus className="select-create-icon size-4 shrink-0 text-muted-foreground" />
+      )}
+      <span className={labelClassName}>{text(query)}</span>
+    </button>
+  )
+}
+
+/**
+ * Watches the sentinel at the bottom of the list and asks for the next page.
+ *
+ * A **ref callback**, not a ref object read from an effect. The list lives
+ * inside a popup that is not in the DOM until it opens, and the non-searchable
+ * Select keeps its open state inside Base UI — opening it re-renders nothing
+ * here. An effect therefore ran exactly once, on mount, with the popup shut and
+ * the sentinel not yet created, read `null`, and returned. The observer was
+ * never attached, so `onLoadMore` never fired and `loadingMore` never turned
+ * true: infinite scroll looked wired up and did nothing.
+ *
+ * React calls a ref callback when the node mounts, whatever caused it, which is
+ * the one signal that does not depend on this component re-rendering.
+ */
+function useInfiniteSentinel(infinite: SelectInfiniteProps | undefined) {
+  const observerRef = useRef<IntersectionObserver | null>(null)
+
+  /**
+   * Read through a ref so the observer is built once per sentinel rather than
+   * once per render — callers pass `infinite` as an object literal, so its
+   * identity changes constantly while its meaning does not.
+   */
+  const latest = useRef(infinite)
+  latest.current = infinite
+
+  useEffect(
+    () => () => {
+      observerRef.current?.disconnect()
+      observerRef.current = null
+    },
+    [],
+  )
+
+  return useCallback((node: HTMLDivElement | null) => {
+    observerRef.current?.disconnect()
+    observerRef.current = null
+
+    if (!node || !latest.current?.onLoadMore) {
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const state = latest.current
+
+        if (entries[0].isIntersecting && state?.hasMore && !state.loadingMore) {
+          state.onLoadMore?.()
+        }
+      },
+      {
+        threshold: 0.1,
+      },
+    )
+
+    observer.observe(node)
+    observerRef.current = observer
+  }, [])
+}
+
+function SelectLoadingMore({ text }: { text?: string }) {
+  return (
+    <div
+      className="select-loading-more flex items-center justify-center gap-2 py-2 text-muted-foreground text-sm"
+      data-testid="select-loading-more"
+    >
+      <Loader size="sm" />
+      {text}
+    </div>
+  )
+}
+
+type WithoutSelectData<P> = P extends unknown
+  ? Omit<P, 'options' | 'outcome'>
+  : never
+
+type ResolvedSelectProps<T, I, O> = WithoutSelectData<SelectProps<T, I, O>> & {
+  options: T[]
+}
+
+/**
+ * The five states of a read collapse into the props the field already has.
+ *
+ * A failed read deliberately does not disable the trigger: a disabled control
+ * fires no pointer events, so the reason inside the popup would be
+ * unreachable, which is worse than no reason at all.
+ */
+function useSelectData<T, I, O>(
+  props: SelectProps<T, I, O>,
+): ResolvedSelectProps<T, I, O> {
+  const labels = useLabels()
+  const { options, outcome, ...rest } = props
+  const resolve = (extra: Record<string, unknown>) =>
+    ({ ...rest, ...extra }) as ResolvedSelectProps<T, I, O>
+
+  if (!outcome) {
+    return resolve({
+      options: options ?? [],
+    })
+  }
+
+  if (outcome.status === 'success') {
+    return resolve({
+      loading: rest.loading || outcome.refreshing,
+      options: outcome.data,
+    })
+  }
+
+  if (outcome.status === 'denied') {
+    return resolve({
+      emptySection: rest.deniedSection ?? (
+        <EmptyState size="sm" title={outcome.reason} />
+      ),
+      options: [],
+    })
+  }
+
+  if (outcome.status === 'error') {
+    return resolve({
+      emptySection: rest.errorSection ?? (
+        <EmptyState
+          action={
+            <Button onClick={outcome.retry} type="button" variant="outline">
+              {labels.common.retry}
+            </Button>
+          }
+          size="sm"
+          title={labels.select.error}
+        />
+      ),
+      options: [],
+    })
+  }
+
+  if (outcome.status === 'pending') {
+    return resolve({
+      loading: true,
+      options: [],
+    })
+  }
+
+  return resolve({
+    options: [],
+  })
+}
+
 function Select<T, I = string, O = I>(props: SelectProps<T, I, O>) {
-  if (props.mode === 'multiple') {
-    return <MultipleSelect {...props} />
+  const resolved = useSelectData(props)
+
+  if (resolved.mode === 'multiple') {
+    return <MultipleSelect {...resolved} />
   }
-  if (props.searchable) {
-    return <SingleSearchableSelect {...props} />
+  if (resolved.searchable || resolved.creatable) {
+    return <SingleSearchableSelect {...resolved} />
   }
-  return <SinglePrimitiveSelect {...props} />
+  return <SinglePrimitiveSelect {...resolved} />
 }
 
 function SinglePrimitiveSelect<T, I = string, O = I>({
@@ -175,7 +439,7 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
   defaultValue,
   onChange,
   clearable = true,
-}: SelectProps<T, I, O> & {
+}: ResolvedSelectProps<T, I, O> & {
   mode: 'single'
 }) {
   const {
@@ -194,7 +458,8 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
     variant,
   })
 
-  const sentinelRef = useRef<HTMLDivElement>(null)
+  const portalContainer = usePortalContainer()
+  const sentinelRef = useInfiniteSentinel(infinite)
   const listRef = useRef<HTMLDivElement>(null)
   const scrollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -265,28 +530,6 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
         },
       ]
 
-  useEffect(() => {
-    if (!infinite?.onLoadMore || !sentinelRef.current) {
-      return
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (
-          entries[0].isIntersecting &&
-          infinite.hasMore &&
-          !infinite.loadingMore
-        ) {
-          infinite.onLoadMore?.()
-        }
-      },
-      {
-        threshold: 0.1,
-      },
-    )
-    observer.observe(sentinelRef.current)
-    return () => observer.disconnect()
-  }, [infinite])
-
   const selectedOption = options.find(
     (o) => toKey(getValue(o, optionValue)) === currentKey,
   )
@@ -314,11 +557,14 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
       value={currentKey || null}
     >
       <SelectPrimitive.Trigger
+        aria-busy={loading}
         className={trigger()}
         data-testid="select-trigger"
         disabled={disabled || loading}
       >
-        {leftSection && <span className="shrink-0">{leftSection}</span>}
+        {leftSection && (
+          <span className="select-left-section shrink-0">{leftSection}</span>
+        )}
         <span className={triggerValue()} data-testid="select-value">
           {selectedOption ? (
             renderValue ? (
@@ -327,13 +573,15 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
               getLabel(selectedOption, optionLabel)
             )
           ) : (
-            <span className="text-muted-foreground">{placeholder}</span>
+            <span className="select-placeholder text-muted-foreground">
+              {placeholder}
+            </span>
           )}
         </span>
         {loading ? (
-          <Loader size="sm" />
+          <Loader decorative size="sm" />
         ) : rightSection ? (
-          <span className="shrink-0">{rightSection}</span>
+          <span className="select-right-section shrink-0">{rightSection}</span>
         ) : showClear ? (
           // biome-ignore lint/a11y/useSemanticElements: nested button inside the select trigger is invalid HTML
           <span
@@ -364,23 +612,25 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
           </span>
         ) : (
           <SelectPrimitive.Icon
-            render={<ChevronDown className="size-4 text-muted-foreground" />}
+            render={
+              <ChevronDown className="select-trigger-icon size-4 text-muted-foreground" />
+            }
           />
         )}
       </SelectPrimitive.Trigger>
-      <SelectPrimitive.Portal>
+      <SelectPrimitive.Portal container={portalContainer}>
         <SelectPrimitive.Positioner
           alignItemWithTrigger={false}
-          className="isolate z-50"
+          className="select-positioner isolate z-50"
           sideOffset={SELECT_POPUP_OFFSET}
         >
           <SelectPrimitive.Popup className={popup()} data-testid="select-popup">
             <SelectPrimitive.ScrollUpArrow
-              className="absolute inset-x-0 top-0 z-10 flex items-center justify-center bg-popover py-1"
+              className="select-scroll-up-arrow absolute inset-x-0 top-0 z-10 flex items-center justify-center bg-popover py-1"
               onMouseEnter={() => startAutoScroll('up')}
               onMouseLeave={stopAutoScroll}
             >
-              <ChevronUp className="size-4" />
+              <ChevronUp className="select-scroll-up-icon size-4" />
             </SelectPrimitive.ScrollUpArrow>
             <SelectPrimitive.List
               className={list()}
@@ -422,7 +672,7 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
                             className={itemCheck()}
                             data-testid="select-item-check"
                           >
-                            <Check className="size-3.5" />
+                            <Check className="select-item-check-icon size-3.5" />
                           </span>
                         )}
                       </SelectPrimitive.Item>
@@ -430,7 +680,7 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
                   })}
                 </SelectPrimitive.Group>
               ))}
-              {infinite?.hasMore && (
+              {infinite?.hasMore && !infinite.error && (
                 <div
                   className={sentinel()}
                   data-testid="select-sentinel"
@@ -438,17 +688,23 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
                 />
               )}
               {infinite?.loadingMore && (
-                <div className="flex justify-center py-2">
-                  <Loader size="sm" />
+                <SelectLoadingMore text={infinite.loadingMoreText} />
+              )}
+              {infinite?.error && infinite.errorSection && (
+                <div
+                  className="select-load-more-error px-2 py-2 text-center text-muted-foreground text-sm"
+                  data-testid="select-load-more-error"
+                >
+                  {infinite.errorSection}
                 </div>
               )}
             </SelectPrimitive.List>
             <SelectPrimitive.ScrollDownArrow
-              className="absolute inset-x-0 bottom-0 z-10 flex items-center justify-center bg-popover py-1"
+              className="select-scroll-down-arrow absolute inset-x-0 bottom-0 z-10 flex items-center justify-center bg-popover py-1"
               onMouseEnter={() => startAutoScroll('down')}
               onMouseLeave={stopAutoScroll}
             >
-              <ChevronDown className="size-4" />
+              <ChevronDown className="select-scroll-down-icon size-4" />
             </SelectPrimitive.ScrollDownArrow>
           </SelectPrimitive.Popup>
         </SelectPrimitive.Positioner>
@@ -464,6 +720,8 @@ function SingleSearchableSelect<T, I = string, O = I>({
   optionGroup,
   renderOption,
   renderValue,
+  creatable,
+  creatableOptions,
   placeholder = 'Select...',
   searchPlaceholder = 'Search...',
   searchValue,
@@ -481,7 +739,7 @@ function SingleSearchableSelect<T, I = string, O = I>({
   defaultValue,
   onChange,
   clearable = true,
-}: SelectProps<T, I, O> & {
+}: ResolvedSelectProps<T, I, O> & {
   mode: 'single'
 }) {
   const {
@@ -497,17 +755,24 @@ function SingleSearchableSelect<T, I = string, O = I>({
     sentinel,
     empty,
     clearTrigger,
+    create,
+    createLabel,
   } = select({
     size,
     variant,
   })
 
+  const labels = useLabels()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const isSearchControlled = searchValue !== undefined
   const currentQuery = isSearchControlled ? searchValue : query
-  const sentinelRef = useRef<HTMLDivElement>(null)
+  const portalContainer = usePortalContainer()
+  const sentinelRef = useInfiniteSentinel(infinite)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const optionRefs = useRef<(HTMLDivElement | null)[]>([])
+  const listboxId = useId()
   const handleSearchChange = useSearchChange(onSearchChange, debounce)
 
   const isControlled = value !== undefined
@@ -540,6 +805,33 @@ function SingleSearchableSelect<T, I = string, O = I>({
         )
       : options
 
+  const creator = useCreatable({
+    creatable,
+    creatableOptions,
+    labelOf: (option: T) => getLabel(option, optionLabel),
+    onCreated: () => {
+      setActiveIndex(-1)
+      if (!isSearchControlled) {
+        setQuery('')
+      }
+      handleSearchChange('')
+    },
+    options,
+    query: currentQuery,
+  })
+
+  const createRow = creator.offered ? (
+    <SelectCreateRow
+      className={create()}
+      creating={creator.creating}
+      key="__create"
+      labelClassName={createLabel()}
+      onCreate={() => void creator.create()}
+      query={creator.query}
+      text={creatableOptions?.label ?? labels.select.create}
+    />
+  ) : null
+
   const grouped = optionGroup
     ? filteredOptions.reduce<
         {
@@ -567,32 +859,61 @@ function SingleSearchableSelect<T, I = string, O = I>({
       ]
 
   useEffect(() => {
-    if (!infinite?.onLoadMore || !sentinelRef.current) {
-      return
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (
-          entries[0].isIntersecting &&
-          infinite.hasMore &&
-          !infinite.loadingMore
-        ) {
-          infinite.onLoadMore?.()
-        }
-      },
-      {
-        threshold: 0.1,
-      },
-    )
-    observer.observe(sentinelRef.current)
-    return () => observer.disconnect()
-  }, [infinite])
-
-  useEffect(() => {
-    if (!open && !isSearchControlled) {
-      setQuery('')
+    if (!open) {
+      setActiveIndex(-1)
+      if (!isSearchControlled) {
+        setQuery('')
+      }
     }
   }, [isSearchControlled, open])
+
+  const groupOffsets = grouped.reduce<number[]>((acc, _group, index) => {
+    acc.push(index === 0 ? 0 : acc[index - 1] + grouped[index - 1].items.length)
+    return acc
+  }, [])
+
+  const focusOption = (index: number) => {
+    setActiveIndex(index)
+    optionRefs.current[index]?.focus()
+  }
+
+  const moveActive = (delta: number) => {
+    const count = filteredOptions.length
+    if (count === 0) {
+      return
+    }
+    if (activeIndex < 0) {
+      focusOption(delta > 0 ? 0 : count - 1)
+      return
+    }
+    focusOption((activeIndex + delta + count) % count)
+  }
+
+  const handleListKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      moveActive(1)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      moveActive(-1)
+      return
+    }
+    if (event.key === 'Home' && filteredOptions.length > 0) {
+      event.preventDefault()
+      focusOption(0)
+      return
+    }
+    if (event.key === 'End' && filteredOptions.length > 0) {
+      event.preventDefault()
+      focusOption(filteredOptions.length - 1)
+      return
+    }
+    if (event.key === 'Escape') {
+      setOpen(false)
+    }
+  }
 
   const selectedOption = options.find(
     (o) => toKey(getValue(o, optionValue)) === currentKey,
@@ -610,11 +931,16 @@ function SingleSearchableSelect<T, I = string, O = I>({
   return (
     <Popover.Root onOpenChange={setOpen} open={open}>
       <Popover.Trigger
+        aria-busy={loading}
+        aria-controls={open ? listboxId : undefined}
         className={trigger()}
         data-testid="select-trigger"
         disabled={disabled || loading}
+        role="combobox"
       >
-        {leftSection && <span className="shrink-0">{leftSection}</span>}
+        {leftSection && (
+          <span className="select-left-section shrink-0">{leftSection}</span>
+        )}
         <span className={triggerValue()} data-testid="select-value">
           {selectedOption ? (
             renderValue ? (
@@ -623,13 +949,15 @@ function SingleSearchableSelect<T, I = string, O = I>({
               getLabel(selectedOption, optionLabel)
             )
           ) : (
-            <span className="text-muted-foreground">{placeholder}</span>
+            <span className="select-placeholder text-muted-foreground">
+              {placeholder}
+            </span>
           )}
         </span>
         {loading ? (
-          <Loader size="sm" />
+          <Loader decorative size="sm" />
         ) : rightSection ? (
-          <span className="shrink-0">{rightSection}</span>
+          <span className="select-right-section shrink-0">{rightSection}</span>
         ) : showClear ? (
           // biome-ignore lint/a11y/useSemanticElements: nested button inside the select trigger is invalid HTML
           <span
@@ -659,12 +987,12 @@ function SingleSearchableSelect<T, I = string, O = I>({
             <X size={14} />
           </span>
         ) : (
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          <ChevronDown className="select-trigger-icon size-4 shrink-0 text-muted-foreground" />
         )}
       </Popover.Trigger>
-      <Popover.Portal>
+      <Popover.Portal container={portalContainer}>
         <Popover.Positioner
-          className="isolate z-50"
+          className="select-positioner isolate z-50"
           sideOffset={SELECT_POPUP_OFFSET}
         >
           <Popover.Popup
@@ -673,29 +1001,41 @@ function SingleSearchableSelect<T, I = string, O = I>({
             initialFocus={searchInputRef}
           >
             <div className={search()} data-testid="select-search">
-              <Search className="mr-2 size-4 shrink-0 text-muted-foreground" />
+              <Search className="select-search-icon mr-2 size-4 shrink-0 text-muted-foreground" />
               <input
                 className={searchInput()}
                 data-testid="select-search-input"
                 onChange={(e) => {
+                  setActiveIndex(-1)
                   if (!isSearchControlled) {
                     setQuery(e.target.value)
                   }
                   handleSearchChange(e.target.value)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    handleListKeyDown(e)
+                  }
                 }}
                 placeholder={searchPlaceholder}
                 ref={searchInputRef}
                 value={currentQuery}
               />
             </div>
-            <div className={list()} data-testid="select-list">
-              {filteredOptions.length === 0 && (
+            <div
+              className={list()}
+              data-testid="select-list"
+              id={listboxId}
+              role="listbox"
+            >
+              {creator.position === 'top' ? createRow : null}
+              {filteredOptions.length === 0 && !creator.offered && (
                 <div className={empty()} data-testid="select-empty">
                   {emptySection ?? 'No options found.'}
                 </div>
               )}
-              {grouped.map(({ group, items }) => (
-                <div key={group || '__default'}>
+              {grouped.map(({ group, items }, groupIndex) => (
+                <div key={group || '__default'} role="presentation">
                   {group && (
                     <div
                       className={groupLabel()}
@@ -704,10 +1044,11 @@ function SingleSearchableSelect<T, I = string, O = I>({
                       {group}
                     </div>
                   )}
-                  {items.map((option) => {
+                  {items.map((option, itemIndex) => {
                     const key = toKey(getValue(option, optionValue))
                     const label = getLabel(option, optionLabel)
                     const selected = key === currentKey
+                    const index = groupOffsets[groupIndex] + itemIndex
                     return (
                       <div
                         aria-selected={selected}
@@ -720,12 +1061,19 @@ function SingleSearchableSelect<T, I = string, O = I>({
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault()
                             handleSelect(key, option)
+                            return
                           }
+                          handleListKeyDown(e)
+                        }}
+                        ref={(node) => {
+                          optionRefs.current[index] = node
                         }}
                         role="option"
-                        tabIndex={-1}
+                        tabIndex={
+                          index === (activeIndex < 0 ? 0 : activeIndex) ? 0 : -1
+                        }
                       >
-                        <span className="flex flex-1 items-center gap-2">
+                        <span className="select-item-label flex flex-1 items-center gap-2">
                           {renderOption ? renderOption(option) : label}
                         </span>
                         {selected && (
@@ -733,7 +1081,7 @@ function SingleSearchableSelect<T, I = string, O = I>({
                             className={itemCheck()}
                             data-testid="select-item-check"
                           >
-                            <Check className="size-3.5" />
+                            <Check className="select-item-check-icon size-3.5" />
                           </span>
                         )}
                       </div>
@@ -741,7 +1089,8 @@ function SingleSearchableSelect<T, I = string, O = I>({
                   })}
                 </div>
               ))}
-              {infinite?.hasMore && (
+              {creator.position === 'bottom' ? createRow : null}
+              {infinite?.hasMore && !infinite.error && (
                 <div
                   className={sentinel()}
                   data-testid="select-sentinel"
@@ -749,8 +1098,14 @@ function SingleSearchableSelect<T, I = string, O = I>({
                 />
               )}
               {infinite?.loadingMore && (
-                <div className="flex justify-center py-2">
-                  <Loader size="sm" />
+                <SelectLoadingMore text={infinite.loadingMoreText} />
+              )}
+              {infinite?.error && infinite.errorSection && (
+                <div
+                  className="select-load-more-error px-2 py-2 text-center text-muted-foreground text-sm"
+                  data-testid="select-load-more-error"
+                >
+                  {infinite.errorSection}
                 </div>
               )}
             </div>
@@ -768,6 +1123,8 @@ function MultipleSelect<T, I = string, O = I>({
   optionGroup,
   renderOption,
   renderValue,
+  creatable,
+  creatableOptions,
   placeholder = 'Select...',
   searchable,
   searchPlaceholder = 'Search...',
@@ -786,7 +1143,7 @@ function MultipleSelect<T, I = string, O = I>({
   defaultValue,
   onChange,
   clearable = true,
-}: SelectProps<T, I, O> & {
+}: ResolvedSelectProps<T, I, O> & {
   mode: 'multiple'
 }) {
   const {
@@ -802,18 +1159,23 @@ function MultipleSelect<T, I = string, O = I>({
     sentinel,
     empty,
     clearTrigger,
+    create,
+    createLabel,
   } = select({
     size,
     variant,
   })
 
+  const labels = useLabels()
   const isControlled = value !== undefined
   const [internalValues, setInternalValues] = useState<string[]>(
     (defaultValue as unknown as I[] | undefined)?.map((v) =>
       toKey(v as unknown as O),
     ) ?? [],
   )
-  const sentinelRef = useRef<HTMLDivElement>(null)
+  const portalContainer = usePortalContainer()
+  const sentinelRef = useInfiniteSentinel(infinite)
+  const listboxId = useId()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const isSearchControlled = searchValue !== undefined
@@ -839,14 +1201,42 @@ function MultipleSelect<T, I = string, O = I>({
     )
   }
 
+  const searching = Boolean(searchable) || Boolean(creatable)
+
   const filteredOptions =
-    searchable && currentQuery && !onSearchChange
+    searching && currentQuery && !onSearchChange
       ? options.filter((o) =>
           getLabel(o, optionLabel)
             .toLowerCase()
             .includes(currentQuery.toLowerCase()),
         )
       : options
+
+  const creator = useCreatable({
+    creatable,
+    creatableOptions,
+    labelOf: (option: T) => getLabel(option, optionLabel),
+    onCreated: () => {
+      if (!isSearchControlled) {
+        setQuery('')
+      }
+      handleSearchChange('')
+    },
+    options,
+    query: currentQuery,
+  })
+
+  const createRow = creator.offered ? (
+    <SelectCreateRow
+      className={create()}
+      creating={creator.creating}
+      key="__create"
+      labelClassName={createLabel()}
+      onCreate={() => void creator.create()}
+      query={creator.query}
+      text={creatableOptions?.label ?? labels.select.create}
+    />
+  ) : null
 
   const grouped = optionGroup
     ? filteredOptions.reduce<
@@ -874,28 +1264,6 @@ function MultipleSelect<T, I = string, O = I>({
         },
       ]
 
-  useEffect(() => {
-    if (!infinite?.onLoadMore || !sentinelRef.current) {
-      return
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (
-          entries[0].isIntersecting &&
-          infinite.hasMore &&
-          !infinite.loadingMore
-        ) {
-          infinite.onLoadMore?.()
-        }
-      },
-      {
-        threshold: 0.1,
-      },
-    )
-    observer.observe(sentinelRef.current)
-    return () => observer.disconnect()
-  }, [infinite])
-
   const selectedOptions = options.filter((o) =>
     selectedKeys.includes(toKey(getValue(o, optionValue))),
   )
@@ -915,14 +1283,21 @@ function MultipleSelect<T, I = string, O = I>({
   return (
     <Popover.Root onOpenChange={setOpen} open={open}>
       <Popover.Trigger
+        aria-busy={loading}
+        aria-controls={open ? listboxId : undefined}
         className={trigger()}
         data-testid="select-trigger"
         disabled={disabled || loading}
+        role="combobox"
       >
-        {leftSection && <span className="shrink-0">{leftSection}</span>}
+        {leftSection && (
+          <span className="select-left-section shrink-0">{leftSection}</span>
+        )}
         <span className={triggerValue()} data-testid="select-value">
           {selectedOptions.length === 0 ? (
-            <span className="text-muted-foreground">{placeholder}</span>
+            <span className="select-placeholder text-muted-foreground">
+              {placeholder}
+            </span>
           ) : (
             <>
               {visibleBadges.map((o) => {
@@ -931,7 +1306,8 @@ function MultipleSelect<T, I = string, O = I>({
                   <Badge key={key} variant="secondary">
                     {renderValue ? renderValue(o) : getLabel(o, optionLabel)}
                     <button
-                      className="pointer-events-auto ml-1 cursor-pointer rounded-full opacity-60 hover:opacity-100"
+                      aria-label={`Remove ${getLabel(o, optionLabel)}`}
+                      className="select-value-remove pointer-events-auto ml-1 cursor-pointer rounded-full opacity-60 hover:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation()
                         toggle(key, o)
@@ -944,7 +1320,7 @@ function MultipleSelect<T, I = string, O = I>({
                 )
               })}
               {overflowCount > 0 && (
-                <span className="shrink-0 text-muted-foreground text-xs">
+                <span className="select-value-overflow shrink-0 text-muted-foreground text-xs">
                   +{overflowCount}
                 </span>
               )}
@@ -952,9 +1328,9 @@ function MultipleSelect<T, I = string, O = I>({
           )}
         </span>
         {loading ? (
-          <Loader size="sm" />
+          <Loader decorative size="sm" />
         ) : rightSection ? (
-          <span className="shrink-0">{rightSection}</span>
+          <span className="select-right-section shrink-0">{rightSection}</span>
         ) : showClear ? (
           // biome-ignore lint/a11y/useSemanticElements: nested button inside the select trigger is invalid HTML
           <span
@@ -984,18 +1360,18 @@ function MultipleSelect<T, I = string, O = I>({
             <X size={14} />
           </span>
         ) : (
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          <ChevronDown className="select-trigger-icon size-4 shrink-0 text-muted-foreground" />
         )}
       </Popover.Trigger>
-      <Popover.Portal>
+      <Popover.Portal container={portalContainer}>
         <Popover.Positioner
-          className="isolate z-50"
+          className="select-positioner isolate z-50"
           sideOffset={SELECT_POPUP_OFFSET}
         >
           <Popover.Popup className={popup()} data-testid="select-popup">
-            {searchable && (
+            {searching && (
               <div className={search()} data-testid="select-search">
-                <Search className="mr-2 size-4 shrink-0 text-muted-foreground" />
+                <Search className="select-search-icon mr-2 size-4 shrink-0 text-muted-foreground" />
                 <input
                   className={searchInput()}
                   data-testid="select-search-input"
@@ -1010,14 +1386,21 @@ function MultipleSelect<T, I = string, O = I>({
                 />
               </div>
             )}
-            <div className={list()} data-testid="select-list">
-              {filteredOptions.length === 0 && (
+            <div
+              aria-multiselectable
+              className={list()}
+              data-testid="select-list"
+              id={listboxId}
+              role="listbox"
+            >
+              {creator.position === 'top' ? createRow : null}
+              {filteredOptions.length === 0 && !creator.offered && (
                 <div className={empty()} data-testid="select-empty">
                   {emptySection ?? 'No options found.'}
                 </div>
               )}
               {grouped.map(({ group, items }) => (
-                <div key={group || '__default'}>
+                <div key={group || '__default'} role="presentation">
                   {group && (
                     <div
                       className={groupLabel()}
@@ -1059,7 +1442,8 @@ function MultipleSelect<T, I = string, O = I>({
                   })}
                 </div>
               ))}
-              {infinite?.hasMore && (
+              {creator.position === 'bottom' ? createRow : null}
+              {infinite?.hasMore && !infinite.error && (
                 <div
                   className={sentinel()}
                   data-testid="select-sentinel"
@@ -1067,8 +1451,14 @@ function MultipleSelect<T, I = string, O = I>({
                 />
               )}
               {infinite?.loadingMore && (
-                <div className="flex justify-center py-2">
-                  <Loader size="sm" />
+                <SelectLoadingMore text={infinite.loadingMoreText} />
+              )}
+              {infinite?.error && infinite.errorSection && (
+                <div
+                  className="select-load-more-error px-2 py-2 text-center text-muted-foreground text-sm"
+                  data-testid="select-load-more-error"
+                >
+                  {infinite.errorSection}
                 </div>
               )}
             </div>

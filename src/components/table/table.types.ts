@@ -12,6 +12,14 @@
  * - Loading state renders LoadingOverlay over the table body
  * - Row click handler fires onRowClick with the row data
  * - Empty state renders emptySection when items array is empty
+ * - `outcome` is the alternative to `items` + `loading`: it carries the five
+ *   states of a remote read, and the table paints all of them itself —
+ *   skeleton rows while pending, an overlay while refreshing, the reason
+ *   while denied, a retry while failed. Header, columns and pagination stay
+ *   in place in every one of them, which is why a failed read belongs inside
+ *   the table rather than in place of it
+ * - `outcome` and `items`/`loading` are mutually exclusive: a table reads
+ *   from a query or from a prop, never from both
  *
  * Implementation:
  * - Semantic <table> with <thead>/<tbody> structure
@@ -21,9 +29,13 @@
  * - <Table columns={cols} items={data} itemKey="id" selection="multiple"
  *     pagination={{ mode: "offset", page, rowsPerPage, total, onPageChange, onRowsPerPageChange }}
  *     sort={sortKey} onSortChange={setSortKey} onRowClick={handleClick} />
+ * - <Table columns={cols} itemKey="id" outcome={outcome} />
  *
- * Dependencies: Checkbox component, Pagination component, LoadingOverlay component
+ * Dependencies: Checkbox component, Pagination component, LoadingOverlay component,
+ * EmptyState component, Skeleton component, @turystack/react-hooks (DataOutcome)
  */
+
+import type { DataOutcome } from '@turystack/react-hooks'
 
 import type { PaginationProps } from '@/components/pagination/pagination.types'
 
@@ -36,16 +48,15 @@ export type TableColumns<T> = Array<{
   label?: string // column header text
   selector?: (row: T, index: number) => React.ReactNode // custom cell renderer
   align?: TableColumnAlign // cell text alignment
-  width?: number // fixed column width in px
+  width?: number // column width, applied as a share of every column width
   sorter?: boolean // enables sorting on this column
   hide?: boolean // hides the column
 }>
 
 export type TableItems<T> = Array<T>
 
-export type TableProps<T> = {
+export type TableBaseProps<T> = {
   columns: TableColumns<T> // column definitions (required)
-  items?: TableItems<T> // data rows
   itemKey: keyof T // unique key field in data items (required)
   selection?: TableSelection // row selection mode
   selectedKeys?: string[] // controlled: selected row keys
@@ -54,9 +65,26 @@ export type TableProps<T> = {
   sort?: string // current sort column key (prefix '-' for desc)
   layoutWidth?: number // opt-in minimum width in px; overflows horizontally when needed
   hidePagination?: boolean // hides pagination even if configured
-  loading?: boolean // shows loading overlay
+  loadingRows?: number // skeleton rows drawn while an outcome is pending
+  deniedSection?: React.ReactNode // content shown when the outcome is denied
   emptySection?: React.ReactNode // content shown when items is empty
+  errorSection?: React.ReactNode // content shown when the outcome failed
   onRowClick?: (row: T) => void // fires when a row is clicked
   onSelectionChange?: (value: string[]) => void // fires when selection changes
   onSortChange?: (sort?: string) => void // fires when sort changes
 }
+
+export type TableStaticProps<T> = {
+  items?: TableItems<T> // data rows
+  loading?: boolean // shows loading overlay
+  outcome?: never
+}
+
+export type TableOutcomeProps<T> = {
+  items?: never
+  loading?: never
+  outcome: DataOutcome<TableItems<T>> // the five states of a remote read
+}
+
+export type TableProps<T> = TableBaseProps<T> &
+  (TableStaticProps<T> | TableOutcomeProps<T>)

@@ -22,7 +22,7 @@ const card = tv({
     },
     footerBordered: {
       true: {
-        footer: 'rounded-b-xl border-t bg-muted/50 py-5',
+        footer: 'border-t py-5',
       },
     },
     headerBordered: {

@@ -1,54 +1,11 @@
-import { forwardRef, useCallback, useRef } from 'react'
-import { tv } from 'tailwind-variants'
+import { useDebounceCallback } from '@turystack/react-hooks'
+import { forwardRef, useCallback } from 'react'
 
 import { Loader } from '@/components/loader'
 import { cn } from '@/support/utils'
 
-import { DEFAULT_SECTION_WIDTH } from './input.shared'
+import { DEBOUNCE_MS, DEFAULT_SECTION_WIDTH, inputShared } from './input.shared'
 import type { InputProps } from './input.types'
-
-const input = tv({
-  defaultVariants: {
-    size: 'md',
-    variant: 'default',
-  },
-  slots: {
-    field: [
-      'input-field w-full min-w-0 rounded-lg border border-input bg-transparent',
-      'text-base outline-none transition-colors md:text-sm',
-      'placeholder:text-muted-foreground',
-      'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
-      'read-only:cursor-pointer',
-      'disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50',
-      'aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20',
-      'dark:bg-input/30 dark:disabled:bg-input/80',
-      'dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40',
-    ],
-    root: 'input-root relative flex w-full items-center',
-    section:
-      'input-section pointer-events-none absolute top-1/2 flex -translate-y-1/2 items-center text-muted-foreground',
-  },
-  variants: {
-    size: {
-      lg: {
-        field: 'h-11 px-3 py-1',
-      },
-      md: {
-        field: 'h-10 px-2.5 py-1',
-      },
-      sm: {
-        field: 'h-9 px-2.5 py-1',
-      },
-    },
-    variant: {
-      default: {},
-      ghost: {
-        field:
-          'border-transparent bg-transparent focus-visible:border-transparent disabled:bg-transparent dark:bg-transparent dark:disabled:bg-transparent',
-      },
-    },
-  },
-})
 
 const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   {
@@ -70,7 +27,10 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   },
   ref,
 ) {
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const emitDebounced = useDebounceCallback(
+    (val: string | null) => onChange?.(val),
+    DEBOUNCE_MS,
+  )
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,17 +42,16 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         onChange(val)
         return
       }
-      clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => onChange(val), 300)
+      emitDebounced(val)
     },
-    [onChange, debounce],
+    [onChange, debounce, emitDebounced],
   )
 
   const effectiveRight = loading ? <Loader size="sm" /> : rightSection
   const hasLeft = Boolean(leftSection)
   const hasRight = Boolean(effectiveRight)
 
-  const { root, field, section } = input({
+  const { root, field, section } = inputShared({
     size,
     variant,
   })
@@ -140,8 +99,10 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         </span>
       )}
       <input
+        aria-busy={loading || undefined}
         data-slot="input"
         data-testid="input-field"
+        disabled={props.disabled || loading}
         onChange={handleChange}
         ref={ref}
         style={fieldStyle}

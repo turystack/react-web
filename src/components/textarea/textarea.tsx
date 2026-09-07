@@ -1,5 +1,7 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { tv } from 'tailwind-variants'
+
+import { cn } from '@/support/utils'
 
 import type { TextareaProps } from './textarea.types'
 
@@ -48,19 +50,25 @@ function Textarea({
   leftSection,
   rightSection,
   rootClassName,
+  className,
   onChange,
   maxLength,
   ...props
 }: TextareaProps) {
+  const hasCounter = maxLength != null
+
+  const [typedLength, setTypedLength] = useState(
+    () => (defaultValue ?? '').length,
+  )
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      if (!onChange) {
-        return
+      if (hasCounter) {
+        setTypedLength(e.target.value.length)
       }
-      const val = e.target.value === '' ? null : e.target.value
-      onChange(val)
+      onChange?.(e.target.value === '' ? null : e.target.value)
     },
-    [onChange],
+    [onChange, hasCounter],
   )
 
   const hasLeft = Boolean(leftSection)
@@ -81,7 +89,7 @@ function Textarea({
           paddingRight: DEFAULT_SECTION_WIDTH,
         }
       : {}),
-    ...(maxLength != null
+    ...(hasCounter
       ? {
           paddingBottom: '1.5rem',
         }
@@ -97,7 +105,7 @@ function Textarea({
           defaultValue: defaultValue ?? undefined,
         }
 
-  const currentLength = value !== undefined ? (value ?? '').length : undefined
+  const currentLength = value !== undefined ? (value ?? '').length : typedLength
 
   return (
     <div
@@ -127,7 +135,7 @@ function Textarea({
         style={fieldStyle}
         {...controlledProps}
         {...props}
-        className={field()}
+        className={cn(field(), className)}
       />
       {hasRight && (
         <span
@@ -142,7 +150,7 @@ function Textarea({
           {rightSection}
         </span>
       )}
-      {maxLength != null && currentLength !== undefined && (
+      {hasCounter && (
         <span className={counter()} data-testid="textarea-counter">
           {currentLength}/{maxLength}
         </span>

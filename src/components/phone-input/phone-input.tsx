@@ -1,9 +1,10 @@
 import { Button } from '@base-ui/react/button'
+import { useDebounceCallback } from '@turystack/react-hooks'
 import * as React from 'react'
 import * as RPNInput from 'react-phone-number-input'
 import flags from 'react-phone-number-input/flags'
 import { tv } from 'tailwind-variants'
-import { ChevronsUpDown } from '@/internal/icons'
+import { ChevronDown } from '@/internal/icons'
 
 import {
   Command,
@@ -18,20 +19,24 @@ import { ScrollArea } from '@/shadcn/scroll-area'
 
 import { buttonShared } from '../button/button.shared'
 import { Input } from '../input'
+import { DEBOUNCE_MS } from '../input/input.shared'
 import type { InputProps, InputSize } from '../input/input.types'
-import type { PhoneInputProps } from './phone-input.types'
+import type { PhoneInputProps, PhoneValue } from './phone-input.types'
 import { getPhoneInputValue, getPhoneValue } from './phone-input.utils'
 
 const rootStyles = tv({
-  base: 'flex',
+  base: 'phone-input-root flex',
 })
 
 const triggerStyles = tv({
-  base: buttonShared({
-    className:
-      'gap-1 rounded-s-lg rounded-e-none border-r-0 px-3 focus:z-10 aria-expanded:border-ring aria-expanded:ring-3 aria-expanded:ring-ring/50 data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/50',
-    variant: 'outline',
-  }),
+  base: [
+    'phone-input-trigger',
+    buttonShared({
+      className:
+        'gap-1 rounded-s-lg rounded-e-none border-r-0 px-3 focus:z-10 aria-expanded:border-ring aria-expanded:ring-3 aria-expanded:ring-ring/50 data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/50',
+      variant: 'outline',
+    }),
+  ],
   defaultVariants: {
     size: 'md',
   },
@@ -45,15 +50,15 @@ const triggerStyles = tv({
 })
 
 const inputFieldStyles = tv({
-  base: 'rounded-s-none rounded-e-lg',
+  base: 'phone-input-field rounded-s-none rounded-e-lg',
 })
 
 const flagStyles = tv({
-  base: '[&>svg]:!h-4 [&>svg]:!w-6 flex h-4 w-6 overflow-hidden rounded-sm bg-foreground/20',
+  base: 'phone-input-flag [&>svg]:!h-4 [&>svg]:!w-6 flex h-4 w-6 overflow-hidden rounded-sm bg-foreground/20',
 })
 
 const itemStyles = tv({
-  base: 'gap-2 [&>svg:last-child]:hidden',
+  base: 'phone-input-option gap-2 [&>svg:last-child]:hidden',
   defaultVariants: {
     selected: false,
   },
@@ -65,7 +70,7 @@ const itemStyles = tv({
 })
 
 const chevronStyles = tv({
-  base: '-mr-2 size-4',
+  base: 'phone-input-chevron -mr-2 size-4',
   defaultVariants: {
     disabled: false,
   },
@@ -100,11 +105,39 @@ const PhoneInput = React.forwardRef<
       | RPNInput.Country
       | undefined
     const inputValue = getPhoneInputValue(value)
-    const defaultInputValue = getPhoneInputValue(defaultValue)
+
+    /**
+     * react-phone-number-input has no `defaultValue`: it keeps the number in
+     * its own state and re-reads `value` only when that prop itself changes,
+     * so seeding `value` once and never moving it again is what an
+     * uncontrolled field looks like from here.
+     */
+    const initialValueRef = React.useRef(getPhoneInputValue(defaultValue))
 
     const selectedCountryRef = React.useRef<RPNInput.Country | undefined>(
       valueCountry ?? defaultValueCountry,
     )
+
+    const emitDebounced = useDebounceCallback(
+      (next: PhoneValue | null) => onChange?.(next),
+      DEBOUNCE_MS,
+    )
+
+    /**
+     * The delay sits on the way out rather than on the inner field: the
+     * formatter reads back everything it emits, so holding the field's own
+     * onChange would strip the number down to its last keystroke.
+     */
+    const emitChange = (next: PhoneValue | null) => {
+      if (!onChange) {
+        return
+      }
+      if (!debounce) {
+        onChange(next)
+        return
+      }
+      emitDebounced(next)
+    }
 
     const inputComponent = React.useCallback(
       ({
@@ -118,6 +151,7 @@ const PhoneInput = React.forwardRef<
           className={inputFieldStyles({
             className: inputClassName,
           })}
+          loading={loading}
           onChange={(val) =>
             rpnOnChange?.({
               target: {
@@ -131,7 +165,7 @@ const PhoneInput = React.forwardRef<
           {...inputProps}
         />
       ),
-      [size, variant, ref],
+      [size, variant, ref, loading],
     )
 
     const countrySelectComponent = React.useCallback(
@@ -147,24 +181,20 @@ const PhoneInput = React.forwardRef<
           className,
         })}
         countrySelectComponent={countrySelectComponent}
-        defaultValue={defaultInputValue}
         flagComponent={FlagComponent}
         inputComponent={inputComponent}
         onChange={(phoneNumber) => {
-          if (!onChange) {
-            return
-          }
-          if (!phoneNumber) {
-            onChange(null)
-            return
-          }
-          onChange(getPhoneValue(phoneNumber, selectedCountryRef.current))
+          emitChange(
+            phoneNumber
+              ? getPhoneValue(phoneNumber, selectedCountryRef.current)
+              : null,
+          )
         }}
         onCountryChange={(country) => {
           selectedCountryRef.current = country
         }}
         smartCaret={false}
-        value={inputValue}
+        value={value === undefined ? initialValueRef.current : inputValue}
         {...props}
       />
     )
@@ -226,7 +256,7 @@ const CountrySelect = ({
               country={selectedCountry}
               countryName={selectedLabel}
             />
-            <ChevronsUpDown
+            <ChevronDown
               className={chevronStyles({
                 disabled,
               })}
@@ -234,7 +264,7 @@ const CountrySelect = ({
           </Button>
         }
       />
-      <PopoverContent className="w-[300px] p-0">
+      <PopoverContent className="phone-input-popover w-[300px] p-0">
         <Command>
           <CommandInput
             onValueChange={(value) => {
@@ -242,7 +272,7 @@ const CountrySelect = ({
               setTimeout(() => {
                 if (scrollAreaRef.current) {
                   const viewportElement = scrollAreaRef.current.querySelector(
-                    '[data-radix-scroll-area-viewport]',
+                    '[data-slot="scroll-area-viewport"]',
                   )
                   if (viewportElement) {
                     viewportElement.scrollTop = 0
@@ -254,7 +284,10 @@ const CountrySelect = ({
             value={searchValue}
           />
           <CommandList>
-            <ScrollArea className="h-72" ref={scrollAreaRef}>
+            <ScrollArea
+              className="phone-input-country-list h-72"
+              ref={scrollAreaRef}
+            >
               <CommandEmpty>No country found.</CommandEmpty>
               <CommandGroup>
                 {countryList.map(({ value, label }) =>
@@ -304,8 +337,10 @@ const CountrySelectOption = ({
       onSelect={handleSelect}
     >
       <FlagComponent country={country} countryName={countryName} />
-      <span className="flex-1 text-sm">{countryName}</span>
-      <span className="w-12 shrink-0 text-right text-foreground/50 text-sm tabular-nums">{`+${RPNInput.getCountryCallingCode(country)}`}</span>
+      <span className="phone-input-option-label flex-1 text-sm">
+        {countryName}
+      </span>
+      <span className="phone-input-option-code w-12 shrink-0 text-right text-foreground/50 text-sm tabular-nums">{`+${RPNInput.getCountryCallingCode(country)}`}</span>
     </CommandItem>
   )
 }

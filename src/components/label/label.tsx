@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from 'react'
 import { tv } from 'tailwind-variants'
+import { useLabels } from '@/components/labels-provider'
 import { Tooltip } from '@/components/tooltip'
 import { Info } from '@/internal/icons'
 import { cn } from '@/support/utils'
@@ -31,6 +32,7 @@ function Label({
   tooltip,
   className,
 }: PropsWithChildren<LabelProps>) {
+  const labels = useLabels()
   const { root, indicator, hint, tooltipIcon } = label({
     disabled,
   })
@@ -38,6 +40,7 @@ function Label({
   return (
     <label
       className={cn(root(), className)}
+      data-disabled={disabled ? '' : undefined}
       data-testid="label-root"
       htmlFor={htmlFor}
     >
@@ -49,7 +52,7 @@ function Label({
       )}
       {optional && (
         <span className={hint()} data-testid="label-hint">
-          (opcional)
+          {labels.common.optional}
         </span>
       )}
       {tooltip && (

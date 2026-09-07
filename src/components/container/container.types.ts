@@ -5,7 +5,8 @@
  * Used as the main content wrapper for page-level layouts.
  *
  * Behavior:
- * - maxWidth sets the constraint: xs (320px) through 2xl (1536px) or full (100%)
+ * - maxWidth sets the constraint: xs (320px), sm (384px), md (768px),
+ *   lg (1152px), xl (1280px), 2xl (1536px) or full (100%)
  * - centered (default true) applies mx-auto for horizontal centering
  * - textAlign controls inner text alignment
  *

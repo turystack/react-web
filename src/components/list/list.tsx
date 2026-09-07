@@ -1,7 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
+import { EmptyState } from '@/components/empty-state'
+import { useLabels } from '@/components/labels-provider'
 import { Loader } from '@/components/loader'
+import { LoadingOverlay } from '@/components/loading-overlay'
 import { Pagination } from '@/components/pagination'
 import { Skeleton } from '@/components/skeleton'
 import { ChevronDown } from '@/internal/icons'
@@ -16,15 +19,15 @@ const styles = tv({
     gap: 'sm',
   },
   slots: {
+    content: 'flex min-w-0 list-content flex-col',
     endReached:
       'list-end-reached px-4 py-2 text-center text-muted-foreground text-sm',
     footer: 'min-w-0 list-footer',
     infiniteControl: 'flex min-w-0 list-infinite-control flex-col gap-2',
-    item: 'list-item min-w-0',
-    list: 'flex min-w-0 list-content flex-col',
     loadingMore:
       'flex min-w-0 list-loading-more items-center justify-center gap-2 py-3 text-muted-foreground text-sm',
-    root: 'flex w-full min-w-0 list-root flex-col gap-4',
+    root: 'relative flex w-full min-w-0 list-root flex-col gap-4',
+    row: 'list-row min-w-0',
     sentinel: 'h-px w-full list-sentinel',
     state:
       'flex min-h-24 w-full min-w-0 list-state items-center justify-center p-4 text-center text-muted-foreground text-sm',
@@ -32,29 +35,29 @@ const styles = tv({
   variants: {
     divided: {
       true: {
-        item: 'border-border border-b last:border-b-0',
+        row: 'border-border border-b last:border-b-0',
       },
     },
     gap: {
       lg: {
-        list: 'gap-4',
+        content: 'gap-4',
       },
       md: {
-        list: 'gap-3',
+        content: 'gap-3',
       },
       none: {
-        list: 'gap-0',
+        content: 'gap-0',
       },
       sm: {
-        list: 'gap-2',
+        content: 'gap-2',
       },
       xs: {
-        list: 'gap-1',
+        content: 'gap-1',
       },
     },
     padded: {
       true: {
-        list: 'p-4',
+        content: 'p-4',
       },
     },
   },
@@ -73,19 +76,19 @@ function getItemKey<T>(
 }
 
 function ListLoadingState({ rows }: { rows: number }) {
-  const { list, item } = styles({
+  const { content, row } = styles({
     gap: 'sm',
   })
 
   return (
-    <div className={list()} data-testid="list-loading">
+    <div className={content()} data-testid="list-loading">
       {Array.from(
         {
           length: rows,
         },
         (_, index) => (
-          <div className={item()} key={`list-loading-${index}`}>
-            <Skeleton className="h-20 w-full" />
+          <div className={row()} key={`list-loading-${index}`}>
+            <Skeleton height="xl" />
           </div>
         ),
       )}
@@ -94,6 +97,7 @@ function ListLoadingState({ rows }: { rows: number }) {
 }
 
 function List<T>({
+  deniedSection,
   divided,
   emptySection,
   error,
@@ -106,13 +110,20 @@ function List<T>({
   loading,
   loadingRows = DEFAULT_LOADING_ROWS,
   loadingSection,
+  outcome,
   padded,
   pagination,
   renderItem,
 }: ListProps<T>) {
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  const data = items ?? []
+  const labels = useLabels()
+  const [sentinelNode, setSentinelNode] = useState<HTMLDivElement | null>(null)
+  const status = outcome?.status
+  const data = (outcome?.status === 'success' ? outcome.data : items) ?? []
   const isEmpty = data.length === 0
+  const isPending = outcome ? status === 'pending' : Boolean(loading)
+  const isFailed = outcome ? status === 'error' : Boolean(error)
+  const isRefreshing =
+    outcome?.status === 'success' ? outcome.refreshing : false
   const hasMore = infinite?.hasMore
   const infiniteDisabled = infinite?.disabled
   const infiniteLoadingMore = infinite?.loadingMore
@@ -121,18 +132,23 @@ function List<T>({
   const endReachedSection = infinite?.endReachedSection
   const onLoadMore = infinite?.onLoadMore
   const rootMargin = infinite?.rootMargin ?? DEFAULT_ROOT_MARGIN
+  const infiniteError = infinite?.error
   const canLoadMore = Boolean(
-    hasMore && onLoadMore && !infiniteLoadingMore && !infiniteDisabled,
+    hasMore &&
+      onLoadMore &&
+      !infiniteLoadingMore &&
+      !infiniteDisabled &&
+      !infiniteError,
   )
 
   const {
+    content,
     endReached,
     footer,
     infiniteControl,
-    item,
-    list,
     loadingMore,
     root,
+    row,
     sentinel,
     state,
   } = styles({
@@ -142,9 +158,7 @@ function List<T>({
   })
 
   useEffect(() => {
-    const node = sentinelRef.current
-
-    if (!node || !canLoadMore) {
+    if (!sentinelNode || !canLoadMore) {
       return
     }
 
@@ -159,10 +173,10 @@ function List<T>({
       },
     )
 
-    observer.observe(node)
+    observer.observe(sentinelNode)
 
     return () => observer.disconnect()
-  }, [canLoadMore, onLoadMore, rootMargin])
+  }, [canLoadMore, onLoadMore, rootMargin, sentinelNode])
 
   const handleLoadMore = () => {
     if (canLoadMore) {
@@ -171,14 +185,39 @@ function List<T>({
   }
 
   const renderState = () => {
-    if (loading && isEmpty) {
+    if (isPending && isEmpty) {
       return loadingSection ?? <ListLoadingState rows={loadingRows} />
     }
 
-    if (error && isEmpty) {
+    if (outcome?.status === 'denied') {
+      return (
+        <div className={state()} data-testid="list-denied">
+          {deniedSection ?? <EmptyState size="sm" title={outcome.reason} />}
+        </div>
+      )
+    }
+
+    if (isFailed && isEmpty) {
       return (
         <div className={state()} data-testid="list-error">
-          {errorSection ?? 'Não foi possível carregar os dados'}
+          {errorSection ??
+            (outcome ? (
+              <EmptyState
+                action={
+                  <Button
+                    onClick={outcome.retry}
+                    type="button"
+                    variant="outline"
+                  >
+                    {labels.common.retry}
+                  </Button>
+                }
+                size="sm"
+                title={labels.list.error}
+              />
+            ) : (
+              labels.list.error
+            ))}
         </div>
       )
     }
@@ -186,7 +225,7 @@ function List<T>({
     if (isEmpty) {
       return (
         <div className={state()} data-testid="list-empty">
-          {emptySection ?? 'Nenhum dado encontrado'}
+          {emptySection ?? labels.list.empty}
         </div>
       )
     }
@@ -197,12 +236,16 @@ function List<T>({
   const stateContent = renderState()
 
   return (
-    <div className={root()} data-testid="list-root">
+    <div
+      aria-busy={isRefreshing ? true : undefined}
+      className={root()}
+      data-testid="list-root"
+    >
       {stateContent ?? (
-        <ul className={list()} data-testid="list-content">
+        <ul className={content()} data-testid="list-content">
           {data.map((dataItem, index) => (
             <li
-              className={item()}
+              className={row()}
               data-testid="list-item"
               key={getItemKey(dataItem, index, itemKey)}
             >
@@ -220,6 +263,8 @@ function List<T>({
 
       {pagination && <Pagination {...pagination} />}
 
+      <LoadingOverlay visible={isRefreshing} />
+
       {infinite && !isEmpty && (
         <div className={infiniteControl()} data-testid="list-infinite">
           {infiniteLoadingMore && (
@@ -229,15 +274,23 @@ function List<T>({
             </div>
           )}
 
-          {canLoadMore && (
+          {infinite.error && infinite.errorSection && (
+            <div className={endReached()} data-testid="list-load-more-error">
+              {infinite.errorSection}
+            </div>
+          )}
+
+          {canLoadMore && !infinite.error && (
             <Button
               block
               onClick={handleLoadMore}
-              rightSection={<ChevronDown className="size-4" />}
+              rightSection={
+                <ChevronDown className="list-load-more-icon size-4" />
+              }
               type="button"
               variant="ghost"
             >
-              {loadMoreText ?? 'Carregar mais'}
+              {loadMoreText ?? labels.list.loadMore}
             </Button>
           )}
 
@@ -247,11 +300,11 @@ function List<T>({
             </div>
           )}
 
-          {hasMore && (
+          {hasMore && !infiniteError && (
             <div
               className={sentinel()}
               data-testid="list-sentinel"
-              ref={sentinelRef}
+              ref={setSentinelNode}
             />
           )}
         </div>

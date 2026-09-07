@@ -22,6 +22,13 @@ export type AvatarSize = 'sm' | 'md' | 'lg'
 
 export type AvatarVariant = 'circle' | 'square'
 
+export type AvatarGroupProps = {
+  /** How many avatars show before the rest become a count. */
+  max?: number
+  size?: AvatarSize // applied to every avatar and to the counter
+  variant?: AvatarVariant // applied to every avatar and to the counter
+}
+
 export type AvatarProps = {
   src?: string | null // image URL
   alt?: string // alt text for the image

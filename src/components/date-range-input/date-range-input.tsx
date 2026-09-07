@@ -11,6 +11,8 @@ import { useMemo, useState } from 'react'
 import { Button } from '@/components/button'
 import { Calendar } from '@/components/calendar'
 import { Input } from '@/components/input'
+import type { TuryLabels } from '@/components/labels-provider'
+import { useLabels } from '@/components/labels-provider'
 import { Popover } from '@/components/popover'
 import { CalendarIcon, X } from '@/internal/icons'
 import { cn } from '@/support/utils'
@@ -21,80 +23,87 @@ import type {
   DateRangeInputProps,
 } from './date-range-input.types'
 
-const DEFAULT_PRESETS: DateRangeInputPreset[] = [
-  {
-    getValue: () => {
-      const today = startOfDay(new Date())
-      return {
-        from: today,
-        to: today,
-      }
+function createDefaultPresets(
+  labels: TuryLabels['dateRangeInput'],
+): DateRangeInputPreset[] {
+  return [
+    {
+      getValue: () => {
+        const today = startOfDay(new Date())
+        return {
+          from: today,
+          to: today,
+        }
+      },
+      key: 'today',
+      label: labels.today,
     },
-    key: 'today',
-    label: 'Hoje',
-  },
-  {
-    getValue: () => {
-      const yesterday = subDays(startOfDay(new Date()), 1)
-      return {
-        from: yesterday,
-        to: yesterday,
-      }
+    {
+      getValue: () => {
+        const yesterday = subDays(startOfDay(new Date()), 1)
+        return {
+          from: yesterday,
+          to: yesterday,
+        }
+      },
+      key: 'yesterday',
+      label: labels.yesterday,
     },
-    key: 'yesterday',
-    label: 'Ontem',
-  },
-  {
-    getValue: () => {
-      const today = startOfDay(new Date())
-      return {
-        from: subDays(today, 6),
-        to: today,
-      }
+    {
+      getValue: () => {
+        const today = startOfDay(new Date())
+        return {
+          from: subDays(today, 6),
+          to: today,
+        }
+      },
+      key: 'last7Days',
+      label: labels.last7Days,
     },
-    key: 'last7Days',
-    label: 'Últimos 7 dias',
-  },
-  {
-    getValue: () => {
-      const today = startOfDay(new Date())
-      return {
-        from: subDays(today, 29),
-        to: today,
-      }
+    {
+      getValue: () => {
+        const today = startOfDay(new Date())
+        return {
+          from: subDays(today, 29),
+          to: today,
+        }
+      },
+      key: 'last30Days',
+      label: labels.last30Days,
     },
-    key: 'last30Days',
-    label: 'Últimos 30 dias',
-  },
-  {
-    getValue: () => {
-      const today = startOfDay(new Date())
-      return {
-        from: startOfMonth(today),
-        to: today,
-      }
+    {
+      getValue: () => {
+        const today = startOfDay(new Date())
+        return {
+          from: startOfMonth(today),
+          to: today,
+        }
+      },
+      key: 'thisMonth',
+      label: labels.thisMonth,
     },
-    key: 'thisMonth',
-    label: 'Este mês',
-  },
-  {
-    getValue: () => {
-      const previousMonth = subMonths(startOfDay(new Date()), 1)
-      return {
-        from: startOfMonth(previousMonth),
-        to: endOfMonth(previousMonth),
-      }
+    {
+      getValue: () => {
+        const previousMonth = subMonths(startOfDay(new Date()), 1)
+        return {
+          from: startOfMonth(previousMonth),
+          to: endOfMonth(previousMonth),
+        }
+      },
+      key: 'lastMonth',
+      label: labels.lastMonth,
     },
-    key: 'lastMonth',
-    label: 'Mês passado',
-  },
-  {
-    key: 'custom',
-    label: 'Personalizado',
-  },
-]
+    {
+      key: 'custom',
+      label: labels.custom,
+    },
+  ]
+}
 
-function formatRange(range: DateRange | null | undefined): string {
+function formatRange(
+  range: DateRange | null | undefined,
+  labels: TuryLabels['common'],
+): string {
   if (!range) {
     return ''
   }
@@ -106,7 +115,7 @@ function formatRange(range: DateRange | null | undefined): string {
     return format(from, 'dd/MM/yyyy')
   }
   if (to) {
-    return `Até ${format(to, 'dd/MM/yyyy')}`
+    return labels.upTo(format(to, 'dd/MM/yyyy'))
   }
   return ''
 }
@@ -188,8 +197,8 @@ function getActivePresetKey(
 }
 
 function DateRangeInput({
-  applyLabel = 'Aplicar',
-  cancelLabel = 'Cancelar',
+  applyLabel,
+  cancelLabel,
   className,
   value,
   defaultValue,
@@ -201,7 +210,14 @@ function DateRangeInput({
   size,
   ...props
 }: DateRangeInputProps) {
-  const initialPresets = showPresets ? (presets ?? DEFAULT_PRESETS) : []
+  const labels = useLabels()
+  const resolvedPresets = useMemo(
+    () =>
+      showPresets
+        ? (presets ?? createDefaultPresets(labels.dateRangeInput))
+        : [],
+    [labels.dateRangeInput, presets, showPresets],
+  )
   const [open, setOpen] = useState(false)
   const [internalRange, setInternalRange] = useState<
     DateRange | null | undefined
@@ -210,7 +226,7 @@ function DateRangeInput({
     copyRange(defaultValue),
   )
   const [activePresetKey, setActivePresetKey] = useState<string | null>(() =>
-    getActivePresetKey(defaultValue, initialPresets),
+    getActivePresetKey(defaultValue, resolvedPresets),
   )
   const [displayMonth, setDisplayMonth] = useState<Date>(
     defaultValue?.from ?? new Date(),
@@ -218,12 +234,8 @@ function DateRangeInput({
 
   const isControlled = value !== undefined
   const selectedRange = isControlled ? value : internalRange
-  const displayValue = formatRange(selectedRange)
+  const displayValue = formatRange(selectedRange, labels.common)
   const hasValue = !!displayValue
-  const resolvedPresets = useMemo(
-    () => (showPresets ? (presets ?? DEFAULT_PRESETS) : []),
-    [presets, showPresets],
-  )
 
   function commit(range: DateRange | null | undefined) {
     const normalizedRange = normalizeRange(range)
@@ -293,11 +305,11 @@ function DateRangeInput({
       content={
         <div className="date-range-input-popover flex overflow-hidden rounded-[inherit] bg-background">
           {resolvedPresets.length > 0 && (
-            <div className="flex min-w-40 flex-col gap-1 border-border border-r p-3">
+            <div className="date-range-input-preset-list flex min-w-40 flex-col gap-1 border-border border-r p-3">
               {resolvedPresets.map((preset) => (
                 <button
                   className={cn(
-                    'cursor-pointer rounded-md px-3 py-1.5 text-left text-sm transition-colors',
+                    'date-range-input-preset cursor-pointer rounded-md px-3 py-1.5 text-left text-sm transition-colors',
                     activePresetKey === preset.key
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -311,9 +323,9 @@ function DateRangeInput({
               ))}
             </div>
           )}
-          <div className="flex flex-col">
+          <div className="date-range-input-calendar-panel flex flex-col">
             <Calendar
-              className="rounded-none"
+              className="date-range-input-calendar rounded-none"
               mode="range"
               month={displayMonth}
               onDateChange={handleSelect}
@@ -321,17 +333,17 @@ function DateRangeInput({
               selected={draftRange}
               size={size}
             />
-            <div className="flex items-center justify-end gap-2 border-border border-t bg-background px-3 py-2">
+            <div className="date-range-input-actions flex items-center justify-end gap-2 border-border border-t bg-background px-3 py-2">
               <Button
                 disabled={disabled}
                 onClick={handleCancel}
                 size="sm"
                 variant="ghost"
               >
-                {cancelLabel}
+                {cancelLabel ?? labels.common.cancel}
               </Button>
               <Button disabled={disabled} onClick={handleApply} size="sm">
-                {applyLabel}
+                {applyLabel ?? labels.common.apply}
               </Button>
             </div>
           </div>
@@ -347,18 +359,19 @@ function DateRangeInput({
         {...props}
         className={cn('date-range-input-root', className)}
         disabled={disabled}
-        leftSection={<CalendarIcon className="size-4" />}
+        leftSection={<CalendarIcon className="date-range-input-icon size-4" />}
         onClick={() => !disabled && setOpen(true)}
         placeholder={placeholder}
         readOnly
         rightSection={
           <button
-            className={`cursor-pointer text-muted-foreground hover:text-foreground ${hasValue && !disabled ? 'visible' : 'invisible'}`}
+            aria-label={labels.common.clear}
+            className={`date-range-input-clear-trigger cursor-pointer text-muted-foreground hover:text-foreground ${hasValue && !disabled ? 'visible' : 'invisible'}`}
             onClick={handleClear}
             tabIndex={hasValue && !disabled ? 0 : -1}
             type="button"
           >
-            <X className="size-4" />
+            <X className="date-range-input-clear-icon size-4" />
           </button>
         }
         size={size}

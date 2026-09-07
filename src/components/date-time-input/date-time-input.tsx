@@ -7,6 +7,7 @@ import { Input } from '@/components/input'
 import { Popover } from '@/components/popover'
 import { TimeInput } from '@/components/time-input'
 import { CalendarIcon, Check, X } from '@/internal/icons'
+import { cn } from '@/support/utils'
 
 import { Button } from '../button'
 import type { DateTimeInputProps } from './date-time-input.types'
@@ -14,11 +15,12 @@ import type { DateTimeInputProps } from './date-time-input.types'
 const styles = tv({
   slots: {
     clearTrigger:
-      'visible cursor-pointer text-muted-foreground hover:text-foreground',
+      'date-time-input-clear-trigger visible cursor-pointer text-muted-foreground hover:text-foreground',
     popoverContent:
-      'flex flex-col overflow-hidden rounded-[inherit] bg-background',
+      'date-time-input-popover-content flex flex-col overflow-hidden rounded-[inherit] bg-background',
     root: 'date-time-input-root',
-    timeRow: 'flex items-center gap-2 border-border border-t px-2 pt-3 pb-2',
+    timeRow:
+      'date-time-input-time-row flex items-center gap-2 border-border border-t px-2 pt-3 pb-2',
   },
   variants: {
     disabled: {
@@ -49,14 +51,17 @@ function applyTime(date: Date, hhmmss: string): Date {
 }
 
 function DateTimeInput({
+  className,
   value,
   defaultValue,
   defaultTime,
   withSeconds = false,
   valueFormat,
   disabled,
+  leftSection,
   onChange,
   placeholder,
+  rightSection,
   size,
   minDate,
   maxDate,
@@ -74,6 +79,9 @@ function DateTimeInput({
   const [open, setOpen] = useState(false)
   const [internalValue, setInternalValue] = useState<Date | null | undefined>(
     defaultValue,
+  )
+  const [displayMonth, setDisplayMonth] = useState<Date>(
+    defaultValue ?? new Date(),
   )
 
   const isControlled = value !== undefined
@@ -155,17 +163,20 @@ function DateTimeInput({
       content={
         <div className={popoverContent()}>
           <Calendar
-            className="rounded-[inherit]"
+            className="date-time-input-calendar rounded-[inherit]"
+            fullWidth
             maxDate={maxDate}
             minDate={minDate}
             mode="single"
+            month={displayMonth}
             onDateChange={handleDateChange}
+            onMonthChange={setDisplayMonth}
             selected={committedValue}
             size={size}
           />
           <div className={timeRow()} ref={timeWrapperRef}>
             <TimeInput
-              className="flex-1"
+              className="date-time-input-time-field flex-1"
               maxTime={maxTime}
               minTime={minTime}
               onChange={handleTimeChange}
@@ -175,11 +186,12 @@ function DateTimeInput({
               withSeconds={withSeconds}
             />
             <Button
+              ariaLabel="Confirm"
               disabled={disabled}
               onClick={() => setOpen(false)}
               size="icon-sm"
             >
-              <Check className="size-4" />
+              <Check className="date-time-input-confirm-icon size-4" />
             </Button>
           </div>
         </div>
@@ -188,32 +200,42 @@ function DateTimeInput({
         if (disabled) {
           return
         }
+        if (op) {
+          setDisplayMonth(committedValue ?? new Date())
+        }
         setOpen(op)
       }}
       open={open}
-      popupClassName="overflow-hidden p-0"
+      popupClassName="w-(--anchor-width) overflow-hidden p-0"
       side="bottom"
       sideOffset={8}
     >
       <Input
         {...props}
-        className={root()}
+        className={cn(root(), className)}
         disabled={disabled}
-        leftSection={<CalendarIcon className="size-4" />}
+        leftSection={
+          leftSection ?? (
+            <CalendarIcon className="date-time-input-icon size-4" />
+          )
+        }
         placeholder={resolvedPlaceholder}
         readOnly
         rightSection={
-          <ButtonPrimitive
-            className={clearTrigger({
-              disabled,
-              hasValue: !!committedValue,
-            })}
-            disabled={disabled}
-            onClick={handleClear}
-            tabIndex={committedValue && !disabled ? 0 : -1}
-          >
-            <X className="size-4" />
-          </ButtonPrimitive>
+          rightSection ?? (
+            <ButtonPrimitive
+              aria-label="Clear date"
+              className={clearTrigger({
+                disabled,
+                hasValue: !!committedValue,
+              })}
+              disabled={disabled}
+              onClick={handleClear}
+              tabIndex={committedValue && !disabled ? 0 : -1}
+            >
+              <X className="date-time-input-clear-icon size-4" />
+            </ButtonPrimitive>
+          )
         }
         size={size}
         value={displayValue}

@@ -8,7 +8,7 @@ import type {
 } from './truncated-text.types'
 
 const styles = tv({
-  base: 'max-w-full overflow-hidden',
+  base: 'truncated-text max-w-full overflow-hidden',
   defaultVariants: {
     lines: 1,
   },

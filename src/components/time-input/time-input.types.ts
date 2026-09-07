@@ -22,7 +22,7 @@
  *
  * Implementation:
  * - Multi-input architecture (one <input role="spinbutton"> per segment)
- * - Pure helpers in time-input.logic.ts (parse/format/clamp/paste)
+ * - Pure helpers in time-input.utils.ts (parse/format/clamp/paste)
  * - minTime/maxTime expressed in the same format as value (HH:MM or HH:MM:SS)
  * - <TimeInput value={time} onChange={setTime} minTime="08:00" maxTime="22:00" />
  *

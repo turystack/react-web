@@ -16,7 +16,7 @@
  * - Peer selectors associate label styling with checkbox state
  * - Controlled (checked/onChange) and uncontrolled (defaultChecked) patterns
  * - <Checkbox label="Accept" size="md" bordered />
- * - <Checkbox.Group items={items} value={selected} variant="horizontal" onChange={setSelected} />
+ * - <Checkbox.Group bordered items={items} size="lg" value={selected} onChange={setSelected} />
  *
  * Dependencies: @radix-ui/react-checkbox, @turystack/react-icons (Check icon)
  */
@@ -26,6 +26,7 @@ export type CheckboxSize = 'sm' | 'md' | 'lg'
 export type CheckboxItem = {
   label: string // display text for the checkbox
   value: string // unique value identifier
+  description?: string // helper text below the label
   disabled?: boolean // prevents interaction
 }
 
@@ -47,7 +48,9 @@ export type CheckboxGroupProps = {
   items: CheckboxItem[] // list of checkbox options
   value?: string[] // controlled: selected values
   defaultValue?: string[] // uncontrolled: initially selected values
+  size?: CheckboxSize // visual size of every checkbox in the group
   disabled?: boolean // disables all checkboxes in group
+  bordered?: boolean // adds border around each checkbox
   variant?: CheckboxGroupVariant // layout direction
   onChange?: (value: string[]) => void // fires when selection changes
 }

@@ -4,22 +4,24 @@ import { Button as ButtonPrimitive } from '@base-ui/react/button'
 import { Collapsible as CollapsiblePrimitive } from '@base-ui/react/collapsible'
 import { Dialog } from '@base-ui/react/dialog'
 import { Menu } from '@base-ui/react/menu'
+import { Separator as SeparatorPrimitive } from '@base-ui/react/separator'
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip'
 import * as React from 'react'
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
-import { Separator } from '@/components/separator'
+import { usePortalContainer } from '@/components/portal-provider'
 import { Skeleton } from '@/components/skeleton'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { ChevronDown, PanelLeft } from '@/internal/icons'
+import { ChevronDown, ChevronsLeft, ChevronsRight } from '@/internal/icons'
 import { cn } from '@/support/utils'
 
+import { SidebarContext, useSidebar } from './sidebar.context'
 import type {
+  SidebarBrandProps,
   SidebarCollapsible,
   SidebarContextValue,
   SidebarGroupActionProps,
   SidebarGroupLabelProps,
-  SidebarInsetProps,
   SidebarMenuActionProps,
   SidebarMenuButtonProps,
   SidebarMenuCollapsibleContentProps,
@@ -29,6 +31,7 @@ import type {
   SidebarMenuSubButtonProps,
   SidebarProps,
   SidebarProviderProps,
+  SidebarSide,
   SidebarTriggerProps,
 } from './sidebar.types'
 
@@ -43,14 +46,17 @@ const SIDEBAR_KEYBOARD_SHORTCUT = 'b'
 
 // ─── Contexts ─────────────────────────────────────────────────────────────────
 
-const SidebarContext = React.createContext<SidebarContextValue | null>(null)
-
 /**
  * Internal setter exposed by SidebarProvider so that a nested <Sidebar> can
  * register its `collapsible` mode into the shared context without prop-drilling.
  */
 const SidebarSetCollapsibleCtx = React.createContext<
   React.Dispatch<React.SetStateAction<SidebarCollapsible>>
+>(() => {})
+
+/** The same registration for `side`, which the trigger reads to point its icon. */
+const SidebarSetSideCtx = React.createContext<
+  React.Dispatch<React.SetStateAction<SidebarSide>>
 >(() => {})
 
 /**
@@ -70,21 +76,42 @@ const SidebarMenuCollapsibleCtx =
     open: false,
   })
 
-function useSidebar(): SidebarContextValue {
-  const ctx = React.useContext(SidebarContext)
-  if (!ctx) {
-    throw new Error('useSidebar must be used within a SidebarProvider')
+function readSidebarCookie(): boolean | null {
+  if (typeof document === 'undefined') {
+    return null
   }
-  return ctx
+  const match = document.cookie.match(
+    new RegExp(`(?:^|;\\s*)${SIDEBAR_COOKIE_NAME}=([^;]*)`),
+  )
+  if (!match) {
+    return null
+  }
+  return match[1] === 'true'
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const wrapperStyles = tv({
-  base: [
-    'group/sidebar-wrapper flex h-svh min-h-0 w-full max-w-full overflow-hidden',
-    'has-data-[variant=inset]:bg-sidebar',
-  ],
+  slots: {
+    sidebarWrapper: [
+      'layout-sidebar-wrapper group/sidebar-wrapper flex h-svh min-h-0 w-full max-w-full overflow-hidden',
+      'has-data-[variant=inset]:bg-sidebar',
+      // A right-hand rail reverses the row here rather than in the consumer's
+      // JSX. The gap that reserves the rail's width is in normal flow, so with
+      // the markup in reading order it landed on the left while the fixed rail
+      // sat on the right — and the documented fix was "write <Layout> before
+      // <Layout.Sidebar>", which then broke every `peer-` selector the inset
+      // variant is built from, because the rail was no longer the peer.
+      //
+      // The `>` is load-bearing: without it this compiles to `:has(*[data-side
+      // =right])`, a descendant match at any depth, and the whole page flips
+      // sides the moment anything below it says `side="right"` — a Sheet, or a
+      // collapsed rail's own tooltip, if the app's portal host sits inside the
+      // shell. The rail is a direct child, so say so. Guarded by `md:` because
+      // below it the rail is a portalled drawer rather than a row item.
+      'md:has-[>[data-side=right]]:flex-row-reverse',
+    ],
+  },
 })
 
 const mobileSidebarStyles = tv({
@@ -92,13 +119,13 @@ const mobileSidebarStyles = tv({
     side: 'left',
   },
   slots: {
-    backdrop: [
-      'fixed inset-0 z-50 bg-black/50',
+    sidebarBackdrop: [
+      'layout-sidebar-backdrop fixed inset-0 z-50 bg-black/50',
       'data-open:fade-in-0 duration-200 data-open:animate-in',
       'data-closed:fade-out-0 data-closed:animate-out data-closed:fill-mode-forwards',
     ],
-    popup: [
-      'fixed inset-y-0 z-50 flex h-full flex-col bg-sidebar text-sidebar-foreground',
+    sidebarMobilePopup: [
+      'layout-sidebar-mobile-popup fixed inset-y-0 z-50 flex h-full flex-col bg-sidebar text-sidebar-foreground',
       'w-(--sidebar-width) duration-200 ease-in-out',
       'data-closed:animate-out data-open:animate-in data-closed:fill-mode-forwards',
     ],
@@ -106,11 +133,11 @@ const mobileSidebarStyles = tv({
   variants: {
     side: {
       left: {
-        popup:
+        sidebarMobilePopup:
           'data-open:slide-in-from-left data-closed:slide-out-to-left left-0 border-r',
       },
       right: {
-        popup:
+        sidebarMobilePopup:
           'data-open:slide-in-from-right data-closed:slide-out-to-right right-0 border-l',
       },
     },
@@ -118,273 +145,423 @@ const mobileSidebarStyles = tv({
 })
 
 const sidebarNoneStyles = tv({
-  base: 'flex h-full w-(--sidebar-width) flex-col bg-sidebar text-sidebar-foreground',
+  compoundVariants: [
+    {
+      class: {
+        sidebarStatic: 'border-r',
+      },
+      side: 'left',
+      variant: 'sidebar',
+    },
+    {
+      class: {
+        sidebarStatic: 'border-l',
+      },
+      side: 'right',
+      variant: 'sidebar',
+    },
+  ],
+  defaultVariants: {
+    side: 'left',
+    variant: 'sidebar',
+  },
+  slots: {
+    sidebarStatic:
+      'layout-sidebar-static flex h-full w-(--sidebar-width) flex-col bg-sidebar text-sidebar-foreground',
+  },
+  variants: {
+    side: {
+      left: {
+        sidebarStatic: '',
+      },
+      right: {
+        sidebarStatic: '',
+      },
+    },
+    variant: {
+      floating: {
+        sidebarStatic: 'rounded-lg shadow-sm ring-1 ring-sidebar-border',
+      },
+      inset: {
+        sidebarStatic: '',
+      },
+      sidebar: {
+        sidebarStatic: '',
+      },
+    },
+  },
 })
 
 const sidebarRootStyles = tv({
-  base: 'group peer hidden text-sidebar-foreground md:block',
+  slots: {
+    sidebarRoot:
+      'layout-sidebar-root group peer hidden text-sidebar-foreground md:block',
+  },
 })
 
 const sidebarGapStyles = tv({
-  base: [
-    'relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
-    'group-data-[collapsible=offcanvas]:w-0',
-    'group-data-[side=right]:rotate-180',
-  ],
   defaultVariants: {
     variant: 'sidebar',
   },
+  slots: {
+    sidebarGap: [
+      'layout-sidebar-gap relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
+      'group-data-[collapsible=offcanvas]:w-0',
+      'group-data-[side=right]:rotate-180',
+    ],
+  },
   variants: {
     variant: {
-      floating:
-        'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]',
-      inset:
-        'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]',
-      sidebar: 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)',
+      floating: {
+        sidebarGap:
+          'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]',
+      },
+      inset: {
+        sidebarGap:
+          'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]',
+      },
+      sidebar: {
+        sidebarGap: 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)',
+      },
     },
   },
 })
 
 const sidebarContainerStyles = tv({
-  base: [
-    'fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width)',
-    'transition-[left,right,width] duration-200 ease-linear',
-    'data-[side=right]:right-0 data-[side=left]:left-0',
-    'data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
-    'data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]',
-    'md:flex',
-  ],
   defaultVariants: {
     variant: 'sidebar',
   },
+  slots: {
+    sidebarContainer: [
+      'layout-sidebar-container fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width)',
+      'transition-[left,right,width] duration-200 ease-linear',
+      'data-[side=right]:right-0 data-[side=left]:left-0',
+      'data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
+      'data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]',
+      'md:flex',
+    ],
+  },
   variants: {
     variant: {
-      floating:
-        'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]',
-      inset:
-        'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]',
-      sidebar: [
-        'group-data-[collapsible=icon]:w-(--sidebar-width-icon)',
-        'group-data-[side=left]:border-r group-data-[side=right]:border-l',
-      ],
+      floating: {
+        sidebarContainer:
+          'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]',
+      },
+      inset: {
+        sidebarContainer:
+          'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]',
+      },
+      sidebar: {
+        sidebarContainer: [
+          'group-data-[collapsible=icon]:w-(--sidebar-width-icon)',
+          'group-data-[side=left]:border-r group-data-[side=right]:border-l',
+        ],
+      },
     },
   },
 })
 
 const sidebarInnerStyles = tv({
-  base: [
-    'flex size-full flex-col bg-sidebar',
-    'group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm',
-    'group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border',
-  ],
-})
-
-const sidebarInsetStyles = tv({
-  base: [
-    'relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background',
-    'md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0',
-    'md:peer-data-[variant=inset]:overflow-hidden md:peer-data-[variant=inset]:rounded-xl',
-    'md:peer-data-[variant=inset]:border md:peer-data-[variant=inset]:border-border md:peer-data-[variant=inset]:shadow-sm',
-    'md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2',
-  ],
-  defaultVariants: {
-    state: 'expanded',
-    variant: 'sidebar',
-  },
-  variants: {
-    state: {
-      collapsed: '',
-      expanded: '',
-    },
-    variant: {
-      floating: '',
-      inset: '',
-      sidebar: '',
-    },
+  slots: {
+    sidebarInner: [
+      'layout-sidebar-inner flex size-full flex-col bg-sidebar',
+      'group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm',
+      'group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border',
+    ],
   },
 })
 
 const structureStyles = tv({
   slots: {
-    collapsiblePanel: [
-      'overflow-hidden transition-[height] duration-200 ease-linear',
-      'h-(--collapsible-panel-height)',
-      'data-[ending-style]:h-0 data-[starting-style]:h-0',
-    ],
-    content: [
-      'no-scrollbar flex min-h-0 flex-1 flex-col gap-0 overflow-auto',
+    sidebarContent: [
+      'layout-sidebar-content no-scrollbar flex min-h-0 flex-1 flex-col gap-0 overflow-auto',
       'group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:overflow-hidden',
     ],
-    footer:
-      'flex flex-col gap-2 p-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0',
-    group:
-      'relative flex w-full min-w-0 flex-col p-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0',
-    groupAction: [
-      'absolute top-3.5 right-3 flex aspect-square w-5 cursor-pointer items-center justify-center rounded-md p-0',
+    sidebarFooter:
+      'layout-sidebar-footer flex flex-col gap-2 p-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0',
+    sidebarGroup:
+      'layout-sidebar-group relative flex w-full min-w-0 flex-col p-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0',
+    // The same 32px square, at the same gutter, as the brand's action above it
+    // and every menu row below it. `top-3.5 right-3 w-5` was a metric of its
+    // own: a 20px box 12px from the edge, which put the `+` two pixels off the
+    // toggle's axis and nothing else's.
+    sidebarGroupAction: [
+      'layout-sidebar-group-action absolute top-2 right-2 flex size-8 cursor-pointer items-center justify-center rounded-md p-0',
       'text-sidebar-foreground outline-hidden ring-sidebar-ring transition-transform',
       'group-data-[collapsible=icon]:hidden',
       'after:absolute after:-inset-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
       'focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0',
     ],
-    groupContent:
-      'w-full text-sm group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center',
-    groupLabel: [
-      'flex h-8 shrink-0 items-center rounded-md px-2 font-medium text-sidebar-foreground/70 text-xs',
+    sidebarGroupContent:
+      'layout-sidebar-group-content w-full text-sm group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center',
+    sidebarGroupLabel: [
+      'layout-sidebar-group-label flex h-8 shrink-0 items-center rounded-md px-2 font-medium text-sidebar-foreground/70 text-xs',
       'outline-hidden ring-sidebar-ring transition-[margin,opacity] duration-200 ease-linear',
       'group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0',
       'focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0',
     ],
-    header:
-      'flex flex-col gap-2 p-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0',
-    menu: 'flex w-full min-w-0 flex-col gap-1 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:items-center',
-    menuBadge: [
-      'pointer-events-none absolute right-1 flex h-5 min-w-5 select-none items-center',
+    sidebarHeader:
+      'layout-sidebar-header flex flex-col gap-2 p-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0',
+    sidebarMenu:
+      'layout-sidebar-menu flex w-full min-w-0 flex-col gap-1 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:items-center',
+    sidebarMenuBadge: [
+      'layout-sidebar-menu-badge pointer-events-none absolute right-1 flex h-5 min-w-5 select-none items-center',
       'justify-center rounded-md px-1 font-medium text-sidebar-foreground text-xs tabular-nums',
       'peer-hover/menu-button:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden',
       'peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1',
       'peer-data-active/menu-button:text-sidebar-accent-foreground',
     ],
-    menuItem: 'group/menu-item relative group-data-[collapsible=icon]:w-auto',
-    menuSub: [
-      'mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 gap-1 border-sidebar-border border-l px-2.5 py-0.5',
+    sidebarMenuCollapsiblePanel: [
+      'layout-sidebar-menu-collapsible-panel overflow-hidden transition-[height] duration-200 ease-linear',
+      'h-(--collapsible-panel-height)',
+      'data-[ending-style]:h-0 data-[starting-style]:h-0',
+    ],
+    sidebarMenuItem:
+      'layout-sidebar-menu-item group/menu-item relative group-data-[collapsible=icon]:w-auto',
+    sidebarMenuSub: [
+      'layout-sidebar-menu-sub mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 gap-1 border-sidebar-border border-l px-2.5 py-0.5',
       'group-data-[collapsible=icon]:hidden',
     ],
-    menuSubItem: 'group/menu-sub-item relative',
-    separator: 'w-auto bg-sidebar-border',
+    sidebarMenuSubItem:
+      'layout-sidebar-menu-sub-item group/menu-sub-item relative',
+    // The thickness is the whole element. Base UI's Separator renders a bare
+    // <div role="separator"> with no intrinsic size, and this copy carried only
+    // a colour — so every divider in every rail was 0px tall and invisible,
+    // including the one the docs point at and call "a separator". The library's
+    // own Separator gets it from the same two data-attribute rules.
+    sidebarSeparator: [
+      'layout-sidebar-separator shrink-0 bg-sidebar-border',
+      'data-horizontal:h-px data-horizontal:w-auto',
+      'data-vertical:w-px data-vertical:self-stretch',
+    ],
   },
 })
 
 const {
-  header: headerClass,
-  footer: footerClass,
-  content: contentClass,
-  separator: separatorClass,
-  group: groupClass,
-  groupLabel: groupLabelClass,
-  groupAction: groupActionClass,
-  groupContent: groupContentClass,
-  menu: menuClass,
-  menuItem: menuItemClass,
-  menuBadge: menuBadgeClass,
-  menuSub: menuSubClass,
-  menuSubItem: menuSubItemClass,
-  collapsiblePanel: collapsiblePanelClass,
+  sidebarHeader: headerClass,
+  sidebarFooter: footerClass,
+  sidebarContent: contentClass,
+  sidebarSeparator: separatorClass,
+  sidebarGroup: groupClass,
+  sidebarGroupLabel: groupLabelClass,
+  sidebarGroupAction: groupActionClass,
+  sidebarGroupContent: groupContentClass,
+  sidebarMenu: menuClass,
+  sidebarMenuItem: menuItemClass,
+  sidebarMenuBadge: menuBadgeClass,
+  sidebarMenuSub: menuSubClass,
+  sidebarMenuSubItem: menuSubItemClass,
+  sidebarMenuCollapsiblePanel: collapsiblePanelClass,
 } = structureStyles()
 
+const brandStyles = tv({
+  slots: {
+    // One DOM order, two directions. The action closes the row at full width,
+    // in the same column as a group's own action — the `+` beside a section
+    // title — and `flex-col-reverse` lifts it *above* the mark on the strip,
+    // which is where it has to be: it is the control that undoes the collapse,
+    // so it cannot be the thing that shrinks out of reach.
+    //
+    // The brand takes no horizontal padding of its own. The header's `p-2` is
+    // the rail's gutter, and sharing it is what puts the 32px mark's centre on
+    // the same axis as the 16px icon of every menu row below it.
+    sidebarBrand: [
+      // `h-12` matches a `size="lg"` menu row, which is what a sidebar footer
+      // ends in — the account. Both ends of the rail are then the same block
+      // inside the same `p-2`, so the mark sits as far from the top edge as
+      // the avatar does from the bottom. At `h-8` it did not: a 32px brand
+      // against a 48px account row put 8px above and 18px below.
+      'layout-sidebar-brand flex h-12 w-full min-w-0 items-center gap-2',
+      'group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:w-8',
+      'group-data-[collapsible=icon]:flex-col-reverse group-data-[collapsible=icon]:gap-1',
+      'group-data-[collapsible=icon]:justify-center',
+    ],
+    // The control is normalised to the rail's own icon column — 32px, the size
+    // of a menu row — so it lines up with the icons below it instead of
+    // standing 4px wider in every direction on its own.
+    sidebarBrandAction: [
+      'layout-sidebar-brand-action flex shrink-0 items-center justify-center',
+      '[&>button]:size-8!',
+    ],
+    sidebarBrandLogo: [
+      'layout-sidebar-brand-logo flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg',
+      'bg-sidebar-primary text-sidebar-primary-foreground [&_svg]:size-4 [&_svg]:shrink-0',
+    ],
+    sidebarBrandSubtitle:
+      'layout-sidebar-brand-subtitle truncate text-sidebar-foreground/70 text-xs',
+    sidebarBrandText: [
+      'layout-sidebar-brand-text grid min-w-0 flex-1 text-left leading-tight',
+      'group-data-[collapsible=icon]:hidden',
+    ],
+    sidebarBrandTitle:
+      'layout-sidebar-brand-title truncate font-semibold text-sm',
+  },
+})
+
+const {
+  sidebarBrand: brandClass,
+  sidebarBrandAction: brandActionClass,
+  sidebarBrandLogo: brandLogoClass,
+  sidebarBrandSubtitle: brandSubtitleClass,
+  sidebarBrandText: brandTextClass,
+  sidebarBrandTitle: brandTitleClass,
+} = brandStyles()
+
 const menuButtonStyles = tv({
-  base: [
-    'peer/menu-button group/menu-button flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm',
-    'outline-hidden ring-sidebar-ring transition-[width,height,padding]',
-    'group-has-data-[sidebar=menu-action]/menu-item:pr-8',
-    'group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2! group-has-data-[sidebar=menu-action]/menu-item:group-data-[collapsible=icon]:pr-2!',
-    'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2',
-    'active:bg-sidebar-accent active:text-sidebar-accent-foreground',
-    'disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
-    'data-open:hover:bg-sidebar-accent data-open:hover:text-sidebar-accent-foreground',
-    'data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground',
-    '[&>span:last-child]:truncate group-data-[collapsible=icon]:[&>span:last-child]:hidden [&_svg]:size-4 [&_svg]:shrink-0',
-  ],
   defaultVariants: {
     isActive: false,
     size: 'default',
     variant: 'default',
   },
+  slots: {
+    sidebarMenuButton: [
+      'layout-sidebar-menu-button peer/menu-button group/menu-button flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm',
+      'outline-hidden ring-sidebar-ring transition-[width,height,padding]',
+      'group-has-data-[sidebar=menu-action]/menu-item:pr-8',
+      'group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2! group-has-data-[sidebar=menu-action]/menu-item:group-data-[collapsible=icon]:pr-2!',
+      'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2',
+      'active:bg-sidebar-accent active:text-sidebar-accent-foreground',
+      'disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
+      'data-open:hover:bg-sidebar-accent data-open:hover:text-sidebar-accent-foreground',
+      'data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground',
+      '[&>span:last-child]:truncate [&_svg]:size-4 [&_svg]:shrink-0',
+      // On the strip only the leading mark survives. This used to hide
+      // `span:last-child`, which reads the row as "icon, then label" and is
+      // wrong the moment anything trails the label: an account row of avatar,
+      // name and chevron has no span as its last child, so nothing matched and
+      // ~200px of content stayed inside a 32px button — clipped at both ends
+      // rather than collapsed.
+      'group-data-[collapsible=icon]:[&>*:not(:first-child)]:hidden',
+    ],
+  },
   variants: {
     isActive: {
-      true: 'bg-sidebar-accent font-medium text-sidebar-accent-foreground',
+      true: {
+        sidebarMenuButton:
+          'bg-sidebar-accent font-medium text-sidebar-accent-foreground',
+      },
     },
     size: {
-      default: 'h-8 text-sm',
-      lg: 'h-12 text-sm group-data-[collapsible=icon]:p-0!',
-      sm: 'h-7 text-xs',
+      default: {
+        sidebarMenuButton: 'h-8 text-sm',
+      },
+      lg: {
+        sidebarMenuButton: 'h-12 text-sm group-data-[collapsible=icon]:p-0!',
+      },
+      sm: {
+        sidebarMenuButton: 'h-7 text-xs',
+      },
     },
     variant: {
-      default: 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-      outline:
-        'bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]',
+      default: {
+        sidebarMenuButton:
+          'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+      },
+      outline: {
+        sidebarMenuButton:
+          'bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]',
+      },
     },
   },
 })
 
 const menuActionStyles = tv({
-  base: [
-    'absolute top-1.5 right-1 flex aspect-square w-5 cursor-pointer items-center justify-center rounded-md p-0',
-    'text-sidebar-foreground outline-hidden ring-sidebar-ring transition-transform',
-    'peer-hover/menu-button:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden',
-    'peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1',
-    'after:absolute after:-inset-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-    'focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0',
-  ],
+  slots: {
+    sidebarMenuAction: [
+      'layout-sidebar-menu-action absolute top-1.5 right-1 flex aspect-square w-5 cursor-pointer items-center justify-center rounded-md p-0',
+      'text-sidebar-foreground outline-hidden ring-sidebar-ring transition-transform',
+      'peer-hover/menu-button:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden',
+      'peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1',
+      'after:absolute after:-inset-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+      'focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0',
+    ],
+  },
   variants: {
     showOnHover: {
-      true: [
-        'group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100',
-        'aria-expanded:opacity-100 peer-data-active/menu-button:text-sidebar-accent-foreground md:opacity-0',
-      ],
+      true: {
+        sidebarMenuAction: [
+          'group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100',
+          'aria-expanded:opacity-100 peer-data-active/menu-button:text-sidebar-accent-foreground md:opacity-0',
+        ],
+      },
     },
   },
 })
 
 const menuSubButtonStyles = tv({
-  base: [
-    'flex h-7 min-w-0 -translate-x-px cursor-pointer items-center gap-2 overflow-hidden rounded-md px-2',
-    'text-sidebar-foreground outline-hidden ring-sidebar-ring',
-    'group-data-[collapsible=icon]:hidden',
-    'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2',
-    'active:bg-sidebar-accent active:text-sidebar-accent-foreground',
-    'disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
-    'data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground',
-    '[&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground',
-  ],
   defaultVariants: {
     isActive: false,
     size: 'md',
   },
+  slots: {
+    sidebarMenuSubButton: [
+      'layout-sidebar-menu-sub-button flex h-7 min-w-0 -translate-x-px cursor-pointer items-center gap-2 overflow-hidden rounded-md px-2',
+      'text-sidebar-foreground outline-hidden ring-sidebar-ring',
+      'group-data-[collapsible=icon]:hidden',
+      'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2',
+      'active:bg-sidebar-accent active:text-sidebar-accent-foreground',
+      'disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
+      'data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground',
+      '[&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground',
+    ],
+  },
   variants: {
     isActive: {
-      true: 'bg-sidebar-accent text-sidebar-accent-foreground',
+      true: {
+        sidebarMenuSubButton:
+          'bg-sidebar-accent text-sidebar-accent-foreground',
+      },
     },
     size: {
-      md: 'text-sm',
-      sm: 'text-xs',
+      md: {
+        sidebarMenuSubButton: 'text-sm',
+      },
+      sm: {
+        sidebarMenuSubButton: 'text-xs',
+      },
     },
   },
 })
 
 const menuSkeletonStyles = tv({
   slots: {
-    icon: 'size-4 rounded-md',
-    root: 'flex h-8 items-center gap-2 rounded-md px-2',
-    text: 'h-4 max-w-(--skeleton-width) flex-1',
+    sidebarMenuSkeleton:
+      'layout-sidebar-menu-skeleton flex h-8 items-center gap-2 rounded-md px-2',
+    sidebarMenuSkeletonIcon:
+      'layout-sidebar-menu-skeleton-icon block size-4 shrink-0',
+    sidebarMenuSkeletonText:
+      'layout-sidebar-menu-skeleton-text block h-4 max-w-(--skeleton-width) flex-1',
   },
 })
 
 const tooltipPopupStyles = tv({
-  base: [
-    'z-50 w-fit max-w-xs rounded-md',
-    'origin-(--transform-origin) bg-foreground px-3 py-1.5 text-background text-xs',
-    'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2',
-    'data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
-    'data-open:fade-in-0 data-open:zoom-in-95 data-open:animate-in',
-    'data-closed:fade-out-0 data-closed:zoom-out-95 data-closed:animate-out',
-  ],
+  slots: {
+    sidebarTooltip: [
+      'layout-sidebar-tooltip z-50 w-fit max-w-xs rounded-md',
+      'origin-(--transform-origin) bg-foreground px-3 py-1.5 text-background text-xs',
+      'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2',
+      'data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+      'data-open:fade-in-0 data-open:zoom-in-95 data-open:animate-in',
+      'data-closed:fade-out-0 data-closed:zoom-out-95 data-closed:animate-out',
+    ],
+  },
 })
 
 const collapsibleDropdownStyles = tv({
   slots: {
-    groupLabel: [
-      'pointer-events-none select-none',
-      'px-2 py-1.5 font-medium text-muted-foreground text-xs',
-      'mb-1 border-b pb-1.5',
-    ],
-    item: [
-      'flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+    sidebarMenuDropdownItem: [
+      'layout-sidebar-menu-dropdown-item flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm',
       'outline-hidden focus:bg-accent focus:text-accent-foreground',
       'data-disabled:pointer-events-none data-disabled:opacity-50',
       '[&>svg]:size-4 [&>svg]:shrink-0',
     ],
-    popup: [
-      'z-50 max-h-(--available-height) min-w-40 origin-(--transform-origin)',
+    sidebarMenuDropdownLabel: [
+      'layout-sidebar-menu-dropdown-label pointer-events-none select-none',
+      'px-2 py-1.5 font-medium text-muted-foreground text-xs',
+      'mb-1 border-b pb-1.5',
+    ],
+    sidebarMenuDropdownPopup: [
+      'layout-sidebar-menu-dropdown-popup z-50 max-h-(--available-height) min-w-40 origin-(--transform-origin)',
       'overflow-y-auto overflow-x-hidden rounded-lg p-1',
       'bg-popover text-popover-foreground text-sm shadow-md',
       'outline-none ring-1 ring-foreground/10',
@@ -392,7 +569,8 @@ const collapsibleDropdownStyles = tv({
       'data-open:fade-in-0 data-open:zoom-in-95 duration-100 data-open:animate-in',
       'data-closed:fade-out-0 data-closed:zoom-out-95 data-closed:animate-out data-closed:overflow-hidden',
     ],
-    positioner: 'isolate z-50 outline-none',
+    sidebarMenuDropdownPositioner:
+      'layout-sidebar-menu-dropdown-positioner isolate z-50 outline-none',
   },
 })
 
@@ -416,6 +594,7 @@ function SidebarProvider({
   // Collapsible mode is registered by the nested <Sidebar> via SidebarSetCollapsibleCtx.
   const [collapsible, setCollapsible] =
     React.useState<SidebarCollapsible>('offcanvas')
+  const [side, setSide] = React.useState<SidebarSide>('left')
 
   const setOpen = React.useCallback(
     (value: boolean | ((current: boolean) => boolean)) => {
@@ -435,6 +614,20 @@ function SidebarProvider({
     () => (isMobile ? setOpenMobile((o) => !o) : setOpen((o) => !o)),
     [isMobile, setOpen],
   )
+
+  // The toggle writes `sidebar_state`; reading it back on mount is what turns
+  // that write into persistence. It runs after the first paint so a server
+  // render and the first client render still agree on `defaultOpen`.
+  const isOpenControlled = openProp !== undefined
+  React.useEffect(() => {
+    if (isOpenControlled) {
+      return
+    }
+    const stored = readSidebarCookie()
+    if (stored !== null) {
+      _setOpen(stored)
+    }
+  }, [isOpenControlled])
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -457,6 +650,7 @@ function SidebarProvider({
       openMobile,
       setOpen,
       setOpenMobile,
+      side,
       state,
       toggleSidebar,
       variant,
@@ -467,6 +661,7 @@ function SidebarProvider({
       open,
       openMobile,
       setOpen,
+      side,
       toggleSidebar,
       state,
       variant,
@@ -474,26 +669,28 @@ function SidebarProvider({
   )
 
   return (
-    <SidebarSetCollapsibleCtx.Provider value={setCollapsible}>
-      <SidebarContext.Provider value={contextValue}>
-        <div
-          className={wrapperStyles({
-            className,
-          })}
-          data-slot="sidebar-wrapper"
-          style={
-            {
-              '--sidebar-width': SIDEBAR_WIDTH,
-              '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
-              ...style,
-            } as React.CSSProperties
-          }
-          {...props}
-        >
-          {children}
-        </div>
-      </SidebarContext.Provider>
-    </SidebarSetCollapsibleCtx.Provider>
+    <SidebarSetSideCtx.Provider value={setSide}>
+      <SidebarSetCollapsibleCtx.Provider value={setCollapsible}>
+        <SidebarContext.Provider value={contextValue}>
+          <div
+            className={wrapperStyles().sidebarWrapper({
+              className,
+            })}
+            data-slot="sidebar-wrapper"
+            style={
+              {
+                '--sidebar-width': SIDEBAR_WIDTH,
+                '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
+                ...style,
+              } as React.CSSProperties
+            }
+            {...props}
+          >
+            {children}
+          </div>
+        </SidebarContext.Provider>
+      </SidebarSetCollapsibleCtx.Provider>
+    </SidebarSetSideCtx.Provider>
   )
 }
 
@@ -515,22 +712,30 @@ function SidebarRoot({
     variant: contextVariant,
   } = useSidebar()
   const variant = variantProp ?? contextVariant
+  const portalContainer = usePortalContainer()
 
   // Register this sidebar's collapsible mode into the provider context so that
   // SidebarMenuCollapsible (and useSidebar() consumers) can read it.
   const setCollapsible = React.useContext(SidebarSetCollapsibleCtx)
+  const setSide = React.useContext(SidebarSetSideCtx)
   React.useLayoutEffect(() => {
     setCollapsible(collapsible)
-  }, [collapsible, setCollapsible])
+    setSide(side)
+  }, [collapsible, setCollapsible, setSide, side])
 
   if (collapsible === 'none') {
     return (
       <SidebarStructureCtx.Provider value={collapsible}>
         <div
           className={sidebarNoneStyles({
+            side,
+            variant,
+          }).sidebarStatic({
             className,
           })}
+          data-side={side}
           data-slot="sidebar"
+          data-variant={variant}
           {...props}
         >
           {children}
@@ -540,19 +745,27 @@ function SidebarRoot({
   }
 
   if (isMobile) {
-    const { backdrop, popup } = mobileSidebarStyles({
+    const { sidebarBackdrop, sidebarMobilePopup } = mobileSidebarStyles({
       side: side as 'left' | 'right',
     })
     return (
       <SidebarStructureCtx.Provider value={collapsible}>
         <Dialog.Root onOpenChange={setOpenMobile} open={openMobile}>
-          <Dialog.Portal>
-            <Dialog.Backdrop className={backdrop()} />
+          <Dialog.Portal container={portalContainer}>
+            <Dialog.Backdrop className={sidebarBackdrop()} />
             <Dialog.Popup
-              className={popup()}
+              // The consumer's className reaches the drawer too. It was
+              // destructured out of `props` and then only ever applied to the
+              // desktop rail, so a `<Layout.Sidebar className>` silently did
+              // nothing below 768px — the one width where nobody is looking.
+              className={sidebarMobilePopup({
+                className,
+              })}
               data-mobile="true"
+              data-side={side}
               data-sidebar="sidebar"
               data-slot="sidebar"
+              data-variant={variant}
               style={
                 {
                   '--sidebar-width': SIDEBAR_WIDTH_MOBILE,
@@ -560,7 +773,9 @@ function SidebarRoot({
               }
               {...props}
             >
-              <div className="flex h-full w-full flex-col">{children}</div>
+              <div className="layout-sidebar-mobile-inner flex h-full w-full flex-col">
+                {children}
+              </div>
             </Dialog.Popup>
           </Dialog.Portal>
         </Dialog.Root>
@@ -571,7 +786,7 @@ function SidebarRoot({
   return (
     <SidebarStructureCtx.Provider value={collapsible}>
       <div
-        className={sidebarRootStyles()}
+        className={sidebarRootStyles().sidebarRoot()}
         data-collapsible={state === 'collapsed' ? collapsible : ''}
         data-side={side}
         data-slot="sidebar"
@@ -582,20 +797,21 @@ function SidebarRoot({
         <div
           className={sidebarGapStyles({
             variant,
-          })}
+          }).sidebarGap()}
           data-slot="sidebar-gap"
         />
         <div
           className={sidebarContainerStyles({
-            className,
             variant,
+          }).sidebarContainer({
+            className,
           })}
           data-side={side}
           data-slot="sidebar-container"
           {...props}
         >
           <div
-            className={sidebarInnerStyles()}
+            className={sidebarInnerStyles().sidebarInner()}
             data-sidebar="sidebar"
             data-slot="sidebar-inner"
           >
@@ -609,40 +825,51 @@ function SidebarRoot({
 
 // ─── SidebarTrigger ───────────────────────────────────────────────────────────
 
-function SidebarTrigger({ onClick }: SidebarTriggerProps) {
-  const { toggleSidebar } = useSidebar()
+function SidebarTrigger({
+  ariaLabel,
+  asChild,
+  children,
+  className,
+  disabled,
+  loading,
+  onClick,
+  size = 'icon-sm',
+  variant = 'ghost',
+}: React.PropsWithChildren<SidebarTriggerProps>) {
+  const { side, state, toggleSidebar } = useSidebar()
+
+  // Which way the rail will move, not what it is. A static icon makes the
+  // control a coin flip: on a collapsed strip the one thing a reader needs to
+  // know is that pressing it brings the rail back.
+  const pointsAway =
+    side === 'left' ? state === 'expanded' : state !== 'expanded'
+  const Chevrons = pointsAway ? ChevronsLeft : ChevronsRight
+
   return (
     <Button
+      ariaLabel={ariaLabel}
+      asChild={asChild}
+      className={className}
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
+      disabled={disabled}
+      loading={loading}
       onClick={(e) => {
         onClick?.(e)
         toggleSidebar()
       }}
-      size="icon-sm"
-      variant="ghost"
+      size={size}
+      variant={variant}
     >
-      <PanelLeft />
-      <span className="sr-only">Toggle Sidebar</span>
+      {children ?? (
+        <>
+          <Chevrons />
+          <span className="layout-sidebar-trigger-label sr-only">
+            Toggle Sidebar
+          </span>
+        </>
+      )}
     </Button>
-  )
-}
-
-// ─── SidebarInset ─────────────────────────────────────────────────────────────
-
-function SidebarInset({ className, ...props }: SidebarInsetProps) {
-  const { state, variant } = useSidebar()
-
-  return (
-    <main
-      className={sidebarInsetStyles({
-        className,
-        state,
-        variant,
-      })}
-      data-slot="sidebar-inset"
-      {...props}
-    />
   )
 }
 
@@ -658,6 +885,52 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<'div'>) {
       data-slot="sidebar-header"
       {...props}
     />
+  )
+}
+
+/**
+ * The logo and the product name, collapsed to the logo alone on the icon rail.
+ *
+ * Written by hand this is four `group-data-[collapsible=icon]:` overrides on
+ * three nested elements, and getting one wrong is invisible until the rail is
+ * collapsed: the showcase and the dashboard demo each wrote their own, and one
+ * of the two overflowed the 3.5rem rail because the label had no `min-w-0`
+ * parent to truncate against. The rail is the one place a consumer cannot see
+ * their mistake in the default state, so the library owns the incantation.
+ */
+function SidebarBrand({
+  action,
+  children,
+  className,
+  logo,
+  subtitle,
+  ...props
+}: SidebarBrandProps) {
+  return (
+    <div
+      className={brandClass({
+        className,
+      })}
+      data-slot="sidebar-brand"
+      {...props}
+    >
+      {logo === undefined ? null : (
+        <span className={brandLogoClass()} data-slot="sidebar-brand-logo">
+          {logo}
+        </span>
+      )}
+      <span className={brandTextClass()} data-slot="sidebar-brand-text">
+        <span className={brandTitleClass()}>{children}</span>
+        {subtitle === undefined ? null : (
+          <span className={brandSubtitleClass()}>{subtitle}</span>
+        )}
+      </span>
+      {action === undefined ? null : (
+        <span className={brandActionClass()} data-slot="sidebar-brand-action">
+          {action}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -690,14 +963,17 @@ function SidebarContent({ className, ...props }: React.ComponentProps<'div'>) {
 function SidebarSeparator({
   className,
   ...props
-}: React.ComponentProps<typeof Separator>) {
+}: Omit<React.ComponentProps<typeof SeparatorPrimitive>, 'className'> & {
+  className?: string
+}) {
   return (
-    <Separator
+    <SeparatorPrimitive
       className={separatorClass({
         className,
       })}
       data-sidebar="separator"
       data-slot="sidebar-separator"
+      data-testid="separator"
       {...props}
     />
   )
@@ -716,11 +992,7 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<'div'>) {
   )
 }
 
-function SidebarGroupLabel({
-  className,
-  asChild: _asChild,
-  ...props
-}: SidebarGroupLabelProps) {
+function SidebarGroupLabel({ className, ...props }: SidebarGroupLabelProps) {
   return (
     <div
       className={groupLabelClass({
@@ -733,11 +1005,7 @@ function SidebarGroupLabel({
   )
 }
 
-function SidebarGroupAction({
-  className,
-  asChild: _asChild,
-  ...props
-}: SidebarGroupActionProps) {
+function SidebarGroupAction({ className, ...props }: SidebarGroupActionProps) {
   return (
     <ButtonPrimitive
       className={groupActionClass({
@@ -799,22 +1067,24 @@ function SidebarMenuButton({
   variant = 'default',
   size = 'default',
   tooltip,
-  asChild: _asChild,
   className,
   ...props
 }: SidebarMenuButtonProps) {
   const { isMobile, state } = useSidebar()
+  const portalContainer = usePortalContainer()
 
   // No tooltip or sidebar is not in collapsed icon mode → plain button
   if (!tooltip || state !== 'collapsed' || isMobile) {
     return (
       <button
+        aria-current={isActive ? 'page' : undefined}
         className={cn(
           menuButtonStyles({
-            className,
             isActive,
             size,
             variant,
+          }).sidebarMenuButton({
+            className,
           }),
         )}
         data-active={isActive || undefined}
@@ -832,16 +1102,22 @@ function SidebarMenuButton({
     typeof tooltip === 'string' ? ('right' as const) : (tooltip.side ?? 'right')
   const tooltipOffset =
     typeof tooltip === 'string' ? 4 : (tooltip.sideOffset ?? 4)
+  const tooltipAlign =
+    typeof tooltip === 'string'
+      ? ('center' as const)
+      : (tooltip.align ?? 'center')
 
   return (
     <TooltipPrimitive.Provider delay={200}>
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger
+          aria-current={isActive ? 'page' : undefined}
           className={menuButtonStyles({
-            className,
             isActive,
             size,
             variant,
+          }).sidebarMenuButton({
+            className,
           })}
           data-active={isActive || undefined}
           data-sidebar="menu-button"
@@ -849,13 +1125,16 @@ function SidebarMenuButton({
           data-slot="sidebar-menu-button"
           {...props}
         />
-        <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Portal container={portalContainer}>
           <TooltipPrimitive.Positioner
-            className="isolate z-50"
+            align={tooltipAlign}
+            className="layout-sidebar-tooltip-positioner isolate z-50"
             side={tooltipSide}
             sideOffset={tooltipOffset}
           >
-            <TooltipPrimitive.Popup className={tooltipPopupStyles()}>
+            <TooltipPrimitive.Popup
+              className={tooltipPopupStyles().sidebarTooltip()}
+            >
               {tooltipContent}
             </TooltipPrimitive.Popup>
           </TooltipPrimitive.Positioner>
@@ -867,15 +1146,15 @@ function SidebarMenuButton({
 
 function SidebarMenuAction({
   showOnHover = false,
-  asChild: _asChild,
   className,
   ...props
 }: SidebarMenuActionProps) {
   return (
     <ButtonPrimitive
       className={menuActionStyles({
-        className,
         showOnHover,
+      }).sidebarMenuAction({
+        className,
       })}
       data-sidebar="menu-action"
       data-slot="sidebar-menu-action"
@@ -908,7 +1187,11 @@ function SidebarMenuSkeleton({
   const [width] = React.useState(
     () => `${Math.floor(Math.random() * 40) + 50}%`,
   )
-  const { root, icon, text } = menuSkeletonStyles()
+  const {
+    sidebarMenuSkeleton: root,
+    sidebarMenuSkeletonIcon: icon,
+    sidebarMenuSkeletonText: text,
+  } = menuSkeletonStyles()
 
   return (
     <div
@@ -920,9 +1203,11 @@ function SidebarMenuSkeleton({
       {...props}
     >
       {showIcon && (
-        <Skeleton className={icon()} data-sidebar="menu-skeleton-icon" />
+        <span className={icon()} data-sidebar="menu-skeleton-icon">
+          <Skeleton height="sm" shape="rectangle" width="xs" />
+        </span>
       )}
-      <Skeleton
+      <span
         className={text()}
         data-sidebar="menu-skeleton-text"
         style={
@@ -930,7 +1215,9 @@ function SidebarMenuSkeleton({
             '--skeleton-width': width,
           } as React.CSSProperties
         }
-      />
+      >
+        <Skeleton height="sm" />
+      </span>
     </div>
   )
 }
@@ -981,18 +1268,18 @@ function SidebarMenuSubItem({
 function SidebarMenuSubButton({
   size = 'md',
   isActive = false,
-  asChild: _asChild,
   className,
   children,
   ...props
 }: SidebarMenuSubButtonProps) {
   const { isIconMode } = React.useContext(SidebarMenuCollapsibleCtx)
-  const { item } = collapsibleDropdownStyles()
+  const { sidebarMenuDropdownItem: item } = collapsibleDropdownStyles()
 
   // In icon mode, render as a Menu.Item so keyboard navigation works.
   if (isIconMode) {
     return (
       <Menu.Item
+        aria-current={isActive ? 'page' : undefined}
         className={item({
           className,
         })}
@@ -1008,10 +1295,12 @@ function SidebarMenuSubButton({
 
   return (
     <a
+      aria-current={isActive ? 'page' : undefined}
       className={menuSubButtonStyles({
-        className,
         isActive,
         size,
+      }).sidebarMenuSubButton({
+        className,
       })}
       data-active={isActive || undefined}
       data-sidebar="menu-sub-button"
@@ -1131,12 +1420,14 @@ function SidebarMenuCollapsibleTrigger({
 }: SidebarMenuCollapsibleTriggerProps) {
   const { isIconMode, open } = React.useContext(SidebarMenuCollapsibleCtx)
   const { isMobile } = useSidebar()
+  const portalContainer = usePortalContainer()
 
   const triggerClass = menuButtonStyles({
-    className,
     isActive,
     size,
     variant,
+  }).sidebarMenuButton({
+    className,
   })
   const sharedDataProps = {
     'data-active': isActive || undefined,
@@ -1157,6 +1448,10 @@ function SidebarMenuCollapsibleTrigger({
         : (tooltip.side ?? 'right')
     const tooltipOffset =
       !tooltip || typeof tooltip === 'string' ? 4 : (tooltip.sideOffset ?? 4)
+    const tooltipAlign =
+      !tooltip || typeof tooltip === 'string'
+        ? ('center' as const)
+        : (tooltip.align ?? 'center')
 
     if (!tooltipContent || isMobile) {
       return (
@@ -1177,13 +1472,16 @@ function SidebarMenuCollapsibleTrigger({
           >
             {children}
           </TooltipPrimitive.Trigger>
-          <TooltipPrimitive.Portal>
+          <TooltipPrimitive.Portal container={portalContainer}>
             <TooltipPrimitive.Positioner
-              className="isolate z-50"
+              align={tooltipAlign}
+              className="layout-sidebar-tooltip-positioner isolate z-50"
               side={tooltipSide}
               sideOffset={tooltipOffset}
             >
-              <TooltipPrimitive.Popup className={tooltipPopupStyles()}>
+              <TooltipPrimitive.Popup
+                className={tooltipPopupStyles().sidebarTooltip()}
+              >
                 {tooltipContent}
               </TooltipPrimitive.Popup>
             </TooltipPrimitive.Positioner>
@@ -1201,7 +1499,7 @@ function SidebarMenuCollapsibleTrigger({
     >
       {children}
       <ChevronDown
-        className="ml-auto -rotate-90 transition-transform duration-200 data-[open]:rotate-0"
+        className="layout-sidebar-menu-collapsible-chevron ml-auto -rotate-90 transition-transform duration-200 data-[open]:rotate-0"
         data-open={open || undefined}
         data-slot="sidebar-menu-collapsible-chevron"
       />
@@ -1215,11 +1513,16 @@ function SidebarMenuCollapsibleContent({
   ...props
 }: SidebarMenuCollapsibleContentProps) {
   const { isIconMode, label } = React.useContext(SidebarMenuCollapsibleCtx)
-  const { positioner, popup, groupLabel } = collapsibleDropdownStyles()
+  const portalContainer = usePortalContainer()
+  const {
+    sidebarMenuDropdownPositioner: positioner,
+    sidebarMenuDropdownPopup: popup,
+    sidebarMenuDropdownLabel: groupLabel,
+  } = collapsibleDropdownStyles()
 
   if (isIconMode) {
     return (
-      <Menu.Portal>
+      <Menu.Portal container={portalContainer}>
         <Menu.Positioner
           align="start"
           className={positioner()}
@@ -1264,6 +1567,7 @@ function SidebarMenuCollapsibleContent({
 // ─── Compound component ───────────────────────────────────────────────────────
 
 const Sidebar = Object.assign(SidebarRoot, {
+  Brand: SidebarBrand,
   Content: SidebarContent,
   Footer: SidebarFooter,
   Group: Object.assign(SidebarGroup, {
@@ -1272,7 +1576,6 @@ const Sidebar = Object.assign(SidebarRoot, {
     Label: SidebarGroupLabel,
   }),
   Header: SidebarHeader,
-  Inset: SidebarInset,
   Menu: Object.assign(SidebarMenu, {
     Action: SidebarMenuAction,
     Badge: SidebarMenuBadge,
@@ -1293,4 +1596,4 @@ const Sidebar = Object.assign(SidebarRoot, {
   Trigger: SidebarTrigger,
 })
 
-export { Sidebar, useSidebar }
+export { Sidebar }

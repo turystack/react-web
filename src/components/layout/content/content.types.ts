@@ -5,7 +5,7 @@
  *
  * Behavior:
  * - Scrollable overflow area within Layout.Main
- * - maxWidth constrains inner content: sm (640px), md (896px), lg (1536px)
+ * - maxWidth constrains inner content: sm (672px), md (896px), lg (1280px)
  * - padding/paddingHorizontal/paddingVertical control spacing
  *
  * Implementation:
@@ -16,9 +16,13 @@
  * Dependencies: none
  */
 
+export type LayoutContentPadding = 'none' | 'sm' | 'md' | 'lg'
+
+export type LayoutContentMaxWidth = 'sm' | 'md' | 'lg'
+
 export type LayoutContentProps = {
-  padding?: 'sm' | 'md' | 'lg' // uniform padding
-  paddingHorizontal?: 'sm' | 'md' | 'lg' // horizontal padding override
-  paddingVertical?: 'sm' | 'md' | 'lg' // vertical padding override
-  maxWidth?: 'sm' | 'md' | 'lg' // constrains inner content max-width
+  padding?: LayoutContentPadding // uniform padding
+  paddingHorizontal?: LayoutContentPadding // horizontal padding override
+  paddingVertical?: LayoutContentPadding // vertical padding override
+  maxWidth?: LayoutContentMaxWidth // constrains inner content max-width
 }

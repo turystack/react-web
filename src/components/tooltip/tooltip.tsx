@@ -1,13 +1,16 @@
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip'
-import type { PropsWithChildren } from 'react'
+import { type PropsWithChildren, useId, useState } from 'react'
 import { tv } from 'tailwind-variants'
+
+import { usePortalContainer } from '@/components/portal-provider'
 
 import type { TooltipProps } from './tooltip.types'
 
 const tooltip = tv({
   slots: {
     arrow: [
-      'tooltip-arrow z-50 size-2.5 rotate-45 rounded-[2px]',
+      'tooltip-arrow z-50 size-2.5 rotate-45',
+      'rounded-[2px]',
       'bg-foreground fill-foreground',
       'translate-y-[calc(-50%-2px)]',
       'data-[side=bottom]:top-1',
@@ -40,24 +43,31 @@ function Tooltip({
   sideOffset = 4,
   delayDuration = 200,
 }: PropsWithChildren<TooltipProps>) {
+  const popupId = useId()
+  const portalContainer = usePortalContainer()
+  const [open, setOpen] = useState(false)
+
   return (
     <TooltipPrimitive.Provider delay={delayDuration}>
-      <TooltipPrimitive.Root>
+      <TooltipPrimitive.Root onOpenChange={(nextOpen) => setOpen(nextOpen)}>
         <TooltipPrimitive.Trigger
+          aria-describedby={open ? popupId : undefined}
           data-testid="tooltip-trigger"
           render={<span className={trigger()} />}
         >
           {children}
         </TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Portal container={portalContainer}>
           <TooltipPrimitive.Positioner
-            className="isolate z-50"
+            className="tooltip-positioner isolate z-50"
             side={side}
             sideOffset={sideOffset}
           >
             <TooltipPrimitive.Popup
               className={popup()}
               data-testid="tooltip-popup"
+              id={popupId}
+              role="tooltip"
             >
               {content}
               <TooltipPrimitive.Arrow

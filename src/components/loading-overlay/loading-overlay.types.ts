@@ -7,7 +7,8 @@
  * Behavior:
  * - visible=true shows the overlay; false hides it
  * - Positioned absolute, fills parent with z-50
- * - Semi-transparent background (bg-background/80) with backdrop blur
+ * - Semi-transparent background (bg-background/80), left unblurred so the
+ *   ring or border of the box underneath stays visible
  * - Centered Loader component
  *
  * Implementation:

@@ -1,23 +1,15 @@
-import * as React from 'react'
+import { useMediaQuery } from 'usehooks-ts'
 
 const MOBILE_BREAKPOINT = 768
 
+/**
+ * Whether the viewport is phone-sized.
+ *
+ * It used to hand-roll matchMedia while this package re-exported
+ * `useMediaQuery` two files away — two listeners doing the same job, and only
+ * one of them handling the case where the query changes. The breakpoint stays
+ * here because it is this design system's, not the hook's.
+ */
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean>(() =>
-    typeof window !== 'undefined'
-      ? window.innerWidth < MOBILE_BREAKPOINT
-      : false,
-  )
-
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener('change', onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener('change', onChange)
-  }, [])
-
-  return isMobile
+  return useMediaQuery(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
 }

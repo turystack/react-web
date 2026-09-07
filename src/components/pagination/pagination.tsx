@@ -1,28 +1,19 @@
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
+import { useLabels } from '@/components/labels-provider'
 import { Select } from '@/components/select'
 import { ChevronLeft, ChevronRight, MoreHorizontal } from '@/internal/icons'
 
 import type { PaginationProps } from './pagination.types'
 
-const ROWS_OPTIONS = [
-  {
-    label: '10',
-    value: 10,
-  },
-  {
-    label: '20',
-    value: 20,
-  },
-  {
-    label: '50',
-    value: 50,
-  },
-  {
-    label: '100',
-    value: 100,
-  },
-]
+const DEFAULT_ROWS_PER_PAGE_OPTIONS = [10, 20, 50, 100]
+
+function toRowsOptions(values: number[]) {
+  return values.map((value) => ({
+    label: String(value),
+    value,
+  }))
+}
 
 const styles = tv({
   slots: {
@@ -35,7 +26,7 @@ const styles = tv({
       'border-transparent hover:bg-muted hover:text-foreground',
       'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
     ],
-    pageBtnActive: 'border-border bg-muted',
+    pageBtnActive: 'pagination-page-btn-active border-border bg-muted',
     root: 'pagination-root flex w-full items-center justify-between gap-4',
     rowsPerPage:
       'pagination-rows-per-page flex items-center gap-2 whitespace-nowrap text-muted-foreground text-sm',
@@ -77,16 +68,19 @@ function getVisiblePages(page: number, totalPages: number): (number | '...')[] {
 }
 
 function Pagination(props: PaginationProps) {
+  const labels = useLabels()
+
   if (props.mode === 'offset') {
     const {
       page,
       rowsPerPage: rpp,
+      rowsPerPageOptions = DEFAULT_ROWS_PER_PAGE_OPTIONS,
       total,
       onPageChange,
       onRowsPerPageChange,
     } = props
-    const totalPages = Math.ceil(total / rpp)
-    const from = (page - 1) * rpp + 1
+    const totalPages = Math.max(1, Math.ceil(total / rpp))
+    const from = total === 0 ? 0 : (page - 1) * rpp + 1
     const to = Math.min(page * rpp, total)
     const isFirst = page <= 1
     const isLast = page >= totalPages
@@ -98,42 +92,47 @@ function Pagination(props: PaginationProps) {
         data-testid="pagination-root"
       >
         <div className={rowsPerPage()}>
-          <span>Linhas por página</span>
+          <span>{labels.pagination.rowsPerPage}</span>
           <Select
             clearable={false}
             mode="single"
-            onChange={(v) => onRowsPerPageChange(v as number)}
+            onChange={(v) => {
+              onRowsPerPageChange(v as number)
+              onPageChange(1)
+            }}
             optionLabel="label"
-            options={ROWS_OPTIONS}
+            options={toRowsOptions(rowsPerPageOptions)}
             optionValue="value"
             size="sm"
             value={rpp}
           />
         </div>
-        <div className="flex items-center gap-1">
+        <div className="pagination-controls flex items-center gap-1">
           <span
             className={info({
               className: 'mr-2',
             })}
           >
-            {from}-{to} de {total}
+            {labels.pagination.range(from, to, total)}
           </span>
           <Button
+            ariaLabel="Previous page"
             data-testid="pagination-prev"
             disabled={isFirst}
             onClick={() => onPageChange(page - 1)}
             size="icon-sm"
             variant="outline"
           >
-            <ChevronLeft className="size-4" />
+            <ChevronLeft className="pagination-prev-icon size-4" />
           </Button>
           {getVisiblePages(page, totalPages).map((p, i) =>
             p === '...' ? (
               <span className={ellipsis()} key={`ellipsis-${i}`}>
-                <MoreHorizontal className="size-4" />
+                <MoreHorizontal className="pagination-ellipsis-icon size-4" />
               </span>
             ) : (
               <button
+                aria-current={p === page ? 'page' : undefined}
                 className={pageBtn({
                   className: p === page ? pageBtnActive() : undefined,
                 })}
@@ -147,13 +146,14 @@ function Pagination(props: PaginationProps) {
             ),
           )}
           <Button
+            ariaLabel="Next page"
             data-testid="pagination-next"
             disabled={isLast}
             onClick={() => onPageChange(page + 1)}
             size="icon-sm"
             variant="outline"
           >
-            <ChevronRight className="size-4" />
+            <ChevronRight className="pagination-next-icon size-4" />
           </Button>
         </div>
       </nav>
@@ -162,6 +162,7 @@ function Pagination(props: PaginationProps) {
 
   const {
     rowsPerPage: rpp,
+    rowsPerPageOptions = DEFAULT_ROWS_PER_PAGE_OPTIONS,
     hasPreviousPage,
     hasNextPage,
     onPreviousPage,
@@ -177,13 +178,13 @@ function Pagination(props: PaginationProps) {
     >
       {onRowsPerPageChange ? (
         <div className={rowsPerPage()}>
-          <span>Rows per page</span>
+          <span>{labels.pagination.rowsPerPage}</span>
           <Select
             clearable={false}
             mode="single"
             onChange={(v) => onRowsPerPageChange(v as number)}
             optionLabel="label"
-            options={ROWS_OPTIONS}
+            options={toRowsOptions(rowsPerPageOptions)}
             optionValue="value"
             size="sm"
             value={rpp}
@@ -192,24 +193,26 @@ function Pagination(props: PaginationProps) {
       ) : (
         <div />
       )}
-      <div className="flex items-center gap-2">
+      <div className="pagination-controls flex items-center gap-2">
         <Button
+          ariaLabel="Previous page"
           data-testid="pagination-prev"
           disabled={!hasPreviousPage}
           onClick={() => onPreviousPage?.()}
           size="icon-sm"
           variant="outline"
         >
-          <ChevronLeft className="size-4" />
+          <ChevronLeft className="pagination-prev-icon size-4" />
         </Button>
         <Button
+          ariaLabel="Next page"
           data-testid="pagination-next"
           disabled={!hasNextPage}
           onClick={() => onNextPage?.()}
           size="icon-sm"
           variant="outline"
         >
-          <ChevronRight className="size-4" />
+          <ChevronRight className="pagination-next-icon size-4" />
         </Button>
       </div>
     </nav>

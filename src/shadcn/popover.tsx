@@ -1,6 +1,6 @@
 import { Popover as PopoverPrimitive } from '@base-ui/react/popover'
-import type * as React from 'react'
 
+import { usePortalContainer } from '@/components/portal-provider'
 import { cn } from '@/support/utils'
 
 function Popover({ ...props }: PopoverPrimitive.Root.Props) {
@@ -33,8 +33,10 @@ function PopoverContent({
     PopoverPrimitive.Positioner.Props,
     'align' | 'alignOffset' | 'side' | 'sideOffset'
   >) {
+  const portalContainer = usePortalContainer()
+
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={portalContainer}>
       <PopoverPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}
@@ -55,44 +57,4 @@ function PopoverContent({
   )
 }
 
-function PopoverHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return (
-    <div
-      className={cn('flex flex-col gap-0.5 text-sm', className)}
-      data-slot="popover-header"
-      {...props}
-    />
-  )
-}
-
-function PopoverTitle({ className, ...props }: PopoverPrimitive.Title.Props) {
-  return (
-    <PopoverPrimitive.Title
-      className={cn('font-heading font-medium', className)}
-      data-slot="popover-title"
-      {...props}
-    />
-  )
-}
-
-function PopoverDescription({
-  className,
-  ...props
-}: PopoverPrimitive.Description.Props) {
-  return (
-    <PopoverPrimitive.Description
-      className={cn('text-muted-foreground', className)}
-      data-slot="popover-description"
-      {...props}
-    />
-  )
-}
-
-export {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-}
+export { Popover, PopoverContent, PopoverTrigger }

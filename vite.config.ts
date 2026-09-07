@@ -13,7 +13,6 @@ export default defineConfig({
       cssFileName: 'index',
       entry: {
         index: path.resolve(__dirname, 'src/index.ts'),
-        'hooks/web': path.resolve(__dirname, 'src/hooks/web.ts'),
       },
       formats: ['es'],
     },
@@ -22,6 +21,7 @@ export default defineConfig({
         'tailwindcss',
         '@turystack/react-icons',
         '@turystack/react-hooks',
+        '@turystack/react-i18n',
       ],
       output: {
         entryFileNames: '[name].js',
@@ -37,9 +37,11 @@ export default defineConfig({
     dts({
       // `.ts` as well as `.tsx`: tests sit beside the code they cover, and the
       // narrower glob was already shipping `phone-input.utils.test.d.ts` to
-      // consumers.
-      exclude: ['**/*.stories.tsx', '**/*.test.ts', '**/*.test.tsx'],
-      rollupTypes: false,
+      // consumers. `tests/` has to go too — it is outside `src`, so including
+      // it moved the declaration root up to the package and every `.d.ts`
+      // landed under `dist/src/`, leaving `types: ./dist/index.d.ts` pointing
+      // at nothing while the build still exited 0.
+      exclude: ['**/*.test.ts', '**/*.test.tsx', 'tests/**'],
       tsconfigPath: './tsconfig.app.json',
     }),
   ],

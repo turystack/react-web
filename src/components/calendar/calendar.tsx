@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import {
   type DayButtonProps,
   DayPicker,
+  type DayProps,
   getDefaultClassNames,
   type Matcher,
   type DateRange as RDPDateRange,
@@ -25,7 +26,7 @@ const styles = tv({
   slots: {
     dayButton: [
       // base button (from shadcn Button output)
-      'group/button shrink-0 cursor-pointer items-center justify-center rounded-lg border-transparent bg-clip-padding',
+      'calendar-day-button group/button shrink-0 cursor-pointer items-center justify-center rounded-lg border-transparent bg-clip-padding',
       'select-none whitespace-nowrap text-sm outline-none transition-all',
       'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
       'active:not-aria-[haspopup]:translate-y-px',
@@ -70,7 +71,7 @@ const styles = tv({
   },
 })
 
-function buildClassNames() {
+function buildClassNames(highlightToday: boolean) {
   const d = getDefaultClassNames()
   return {
     button_next: cn(
@@ -129,7 +130,8 @@ function buildClassNames() {
     selected: cn(d.selected),
     table: 'w-full border-collapse',
     today: cn(
-      'rounded-(--cell-radius) bg-muted text-foreground data-[selected=true]:rounded-none',
+      highlightToday &&
+        'rounded-(--cell-radius) bg-muted text-foreground data-[selected=true]:rounded-none',
       d.today,
     ),
     week: cn('mt-2 flex w-full', d.week),
@@ -202,6 +204,16 @@ function CalendarDayButton({
   )
 }
 
+/**
+ * react-day-picker resolves `today` internally and drops a falsy custom
+ * modifier before it can shadow that flag, so the only place left to unmark
+ * today is the cell it renders. The day button keeps its "Today," accessible
+ * name: `highlightToday` decides decoration, not what a screen reader is told.
+ */
+function CalendarPlainDay({ day, modifiers, ...props }: DayProps) {
+  return <td {...props} data-today={undefined} />
+}
+
 function Calendar(props: CalendarProps) {
   const {
     className,
@@ -219,6 +231,7 @@ function Calendar(props: CalendarProps) {
     selected,
     showOutsideDays = true,
     size,
+    weekStartsOn,
     onDateChange,
   } = props
 
@@ -243,7 +256,7 @@ function Calendar(props: CalendarProps) {
   }
 
   const numberOfMonths = numberOfMonthsProp ?? (mode === 'range' ? 2 : 1)
-  const classNames = buildClassNames()
+  const classNames = buildClassNames(highlightToday)
   const dayButtonClass = dayButton()
   const defaultDayClass = getDefaultClassNames().day
 
@@ -254,6 +267,11 @@ function Calendar(props: CalendarProps) {
     classNames,
     components: {
       Chevron: CalendarChevron,
+      ...(highlightToday
+        ? {}
+        : {
+            Day: CalendarPlainDay,
+          }),
       DayButton: (dayBtnProps: DayButtonProps) => (
         <CalendarDayButton
           dayButtonClass={dayButtonClass}
@@ -279,18 +297,12 @@ function Calendar(props: CalendarProps) {
     disabled: disabledMatchers.length > 0 ? disabledMatchers : undefined,
     endMonth: maxDate,
     locale,
-    ...(highlightToday
-      ? {}
-      : {
-          modifiers: {
-            today: false as const,
-          },
-        }),
     month,
     numberOfMonths,
     onMonthChange,
     showOutsideDays,
     startMonth: minDate,
+    weekStartsOn,
   }
 
   if (mode === 'single') {

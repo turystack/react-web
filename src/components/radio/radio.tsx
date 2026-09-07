@@ -1,10 +1,14 @@
 import { Radio as RadioPrimitive } from '@base-ui/react/radio'
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group'
+import { useState } from 'react'
 import { tv } from 'tailwind-variants'
 
 import type { RadioGroupProps, RadioProps } from './radio.types'
 
 const radio = tv({
+  defaultVariants: {
+    variant: 'vertical',
+  },
   slots: {
     control: [
       'radio-control relative flex aspect-square size-4 shrink-0 rounded-full',
@@ -14,6 +18,7 @@ const radio = tv({
       'data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground',
       'dark:bg-input/30 dark:data-checked:bg-primary',
     ],
+    group: 'radio-group flex',
     indicator: 'radio-indicator flex size-4 items-center justify-center',
     root: 'radio-root flex cursor-pointer items-center gap-2',
   },
@@ -29,18 +34,13 @@ const radio = tv({
         root: 'items-start',
       },
     },
-  },
-})
-
-const radioGroup = tv({
-  base: 'radio-group flex',
-  defaultVariants: {
-    variant: 'vertical',
-  },
-  variants: {
     variant: {
-      horizontal: 'flex-row flex-wrap gap-4',
-      vertical: 'flex-col gap-2',
+      horizontal: {
+        group: 'flex-row flex-wrap gap-4',
+      },
+      vertical: {
+        group: 'flex-col gap-2',
+      },
     },
   },
 })
@@ -72,18 +72,20 @@ function RadioItem({
           data-slot="radio-indicator"
           data-testid="radio-indicator"
         >
-          <span className="absolute top-1/2 left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-foreground" />
+          <span className="radio-dot absolute top-1/2 left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-foreground" />
         </RadioPrimitive.Indicator>
       </RadioPrimitive.Root>
       {(label || description) && (
-        <div className="flex flex-col gap-0.5">
+        <div className="radio-content flex flex-col gap-0.5">
           {label && (
-            <span className="cursor-pointer font-medium text-sm leading-none">
+            <span className="radio-label cursor-pointer font-medium text-sm leading-none">
               {label}
             </span>
           )}
           {description && (
-            <span className="text-muted-foreground text-xs">{description}</span>
+            <span className="radio-description text-muted-foreground text-xs">
+              {description}
+            </span>
           )}
         </div>
       )}
@@ -91,13 +93,30 @@ function RadioItem({
   )
 }
 
-function RadioRoot({ checked, onChange, value, ...props }: RadioProps) {
+function RadioRoot({
+  checked,
+  defaultChecked,
+  onChange,
+  value,
+  ...props
+}: RadioProps) {
   const innerValue = value ?? 'radio'
+  const [internalChecked, setInternalChecked] = useState(
+    defaultChecked ?? false,
+  )
+  const isControlled = checked !== undefined
+  const isChecked = isControlled ? checked : internalChecked
 
   return (
     <RadioGroupPrimitive
-      onValueChange={(v) => onChange?.(v === innerValue)}
-      value={checked ? innerValue : ''}
+      onValueChange={(next) => {
+        const nextChecked = next === innerValue
+        if (!isControlled) {
+          setInternalChecked(nextChecked)
+        }
+        onChange?.(nextChecked)
+      }}
+      value={isChecked ? innerValue : ''}
     >
       <RadioItem value={innerValue} {...props} />
     </RadioGroupPrimitive>
@@ -113,11 +132,13 @@ function RadioGroup({
   variant,
   onChange,
 }: RadioGroupProps) {
+  const { group } = radio({
+    variant,
+  })
+
   return (
     <RadioGroupPrimitive
-      className={radioGroup({
-        variant,
-      })}
+      className={group()}
       data-testid="radio-group"
       defaultValue={defaultValue}
       disabled={disabled}

@@ -11,6 +11,7 @@ function MaskInput({
   variant,
   value,
   defaultValue,
+  disabled,
   leftSection,
   leftSectionWidth = DEFAULT_SECTION_WIDTH,
   rightSection,
@@ -36,6 +37,20 @@ function MaskInput({
       }))
     : mask
 
+  /**
+   * IMaskInput seeds the mask from `defaultValue` only while no `value` key
+   * reaches it at all: a `value` of `undefined` still counts as controlled and
+   * overwrites the field, so the two have to be mutually exclusive here.
+   */
+  const controlledProps =
+    value !== undefined
+      ? {
+          value: value ?? '',
+        }
+      : {
+          defaultValue: defaultValue ?? undefined,
+        }
+
   return (
     <div
       className={root({
@@ -58,11 +73,12 @@ function MaskInput({
       )}
       <IMaskInput
         {...(props as object)}
+        aria-busy={loading || undefined}
         className={field({
           className,
         })}
         data-testid="mask-input-field"
-        defaultValue={defaultValue ?? undefined}
+        disabled={disabled || loading}
         mask={maskOptions as string}
         onAccept={(val: string) => onChange?.(val === '' ? null : val)}
         style={{
@@ -77,7 +93,7 @@ function MaskInput({
               }
             : {}),
         }}
-        value={value ?? ''}
+        {...controlledProps}
       />
       {hasRight && (
         <span

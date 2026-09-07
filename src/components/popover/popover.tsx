@@ -2,9 +2,18 @@ import { Popover as PopoverPrimitive } from '@base-ui/react/popover'
 import type { PropsWithChildren } from 'react'
 import { tv } from 'tailwind-variants'
 
+import { usePortalContainer } from '@/components/portal-provider'
 import { cn } from '@/support/utils'
 
 import type { PopoverProps } from './popover.types'
+
+/**
+ * The field the trigger wraps keeps a focus ring for as long as the popup it
+ * opened is on screen. It lives beside the slots rather than inside them so the
+ * bracketed selector stays one readable rule.
+ */
+const triggerOpen =
+  'data-popup-open:[&_.input-field]:border-ring data-popup-open:[&_.input-field]:ring-3 data-popup-open:[&_.input-field]:ring-ring/50'
 
 const popover = tv({
   slots: {
@@ -20,11 +29,8 @@ const popover = tv({
       'data-open:fade-in-0 data-open:zoom-in-95 duration-100 data-open:animate-in',
       'data-closed:fade-out-0 data-closed:zoom-out-95 data-closed:animate-out',
     ],
-    positioner: 'isolate z-50',
-    trigger: [
-      'popover-trigger inline-flex',
-      'data-popup-open:[&_.input-field]:border-ring data-popup-open:[&_.input-field]:ring-3 data-popup-open:[&_.input-field]:ring-ring/50',
-    ],
+    positioner: 'popover-positioner isolate z-50',
+    trigger: ['popover-trigger inline-flex', triggerOpen],
   },
 })
 
@@ -40,15 +46,26 @@ function Popover({
   align = 'center',
   popupClassName,
 }: PropsWithChildren<PopoverProps>) {
+  const portalContainer = usePortalContainer()
+
   return (
     <PopoverPrimitive.Root onOpenChange={onOpenChange} open={open}>
+      {/*
+        The trigger wraps whatever the consumer nests inside it, which is a
+        real control of their own — a Button, an Input. Telling Base UI the
+        rendered element is not a native <button> is what gives the wrapper
+        `role="button"` and stops it warning; the negative tabIndex keeps the
+        nested control as the single tab stop for the pair.
+      */}
       <PopoverPrimitive.Trigger
         data-testid="popover-trigger"
+        nativeButton={false}
         render={<span className={trigger()} />}
+        tabIndex={-1}
       >
         {children}
       </PopoverPrimitive.Trigger>
-      <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Portal container={portalContainer}>
         <PopoverPrimitive.Positioner
           align={align}
           className={positioner()}

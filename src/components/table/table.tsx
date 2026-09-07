@@ -1,26 +1,34 @@
 import { type CSSProperties, Fragment, type MouseEvent, useState } from 'react'
 import { tv } from 'tailwind-variants'
+import { Button } from '@/components/button'
 import { Checkbox } from '@/components/checkbox'
+import { EmptyState } from '@/components/empty-state'
+import { useLabels } from '@/components/labels-provider'
 import { LoadingOverlay } from '@/components/loading-overlay'
 import { Pagination } from '@/components/pagination'
+import { Skeleton } from '@/components/skeleton'
 import { ArrowDown, ArrowUp, ArrowUpDown } from '@/internal/icons'
 
 import type { TableProps } from './table.types'
+import { getTableBody, getTableLayout } from './table.utils'
+
+const DEFAULT_LOADING_ROWS = 3
 
 const styles = tv({
   slots: {
-    body: '[&_tr:last-child]:border-0',
-    cell: 'whitespace-nowrap p-2 align-middle [&:has([role=checkbox])]:pr-0',
-    cellContent: 'min-w-0 max-w-full [&>*]:min-w-0',
+    body: 'table-body [&_tr:last-child]:border-0',
+    cell: 'table-cell whitespace-nowrap p-2 align-middle [&:has([role=checkbox])]:pr-0',
+    cellContent: 'table-cell-content min-w-0 max-w-full [&>*]:min-w-0',
     container:
-      'relative w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-md border',
-    emptyCell: 'p-8 text-center text-muted-foreground',
-    head: 'h-10 whitespace-nowrap px-2 text-left align-middle font-medium text-foreground [&:has([role=checkbox])]:pr-0',
-    header: 'bg-muted/40 [&_tr]:border-b',
+      'table-container relative w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-md border',
+    emptyCell: 'table-empty-cell p-8 text-center text-muted-foreground',
+    head: 'table-head h-10 whitespace-nowrap px-2 text-left align-middle font-medium text-foreground [&:has([role=checkbox])]:pr-0',
+    header: 'table-header bg-muted/40 [&_tr]:border-b',
     root: 'table-root flex w-full min-w-0 flex-col gap-4',
-    row: 'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted',
-    sortButton: 'inline-flex cursor-pointer select-none items-center gap-1',
-    table: 'w-full table-fixed caption-bottom text-sm',
+    row: 'table-row border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted',
+    sortButton:
+      'table-sort-button inline-flex cursor-pointer select-none items-center gap-1',
+    table: 'table-table w-full table-fixed caption-bottom text-sm',
   },
 })
 
@@ -53,13 +61,17 @@ const interactiveSelector = [
 function Table<T>({
   columns,
   defaultSelectedKeys = [],
+  deniedSection,
   emptySection,
+  errorSection,
   hidePagination,
   itemKey,
   items,
   layoutWidth,
   loading,
+  loadingRows = DEFAULT_LOADING_ROWS,
   onRowClick,
+  outcome,
   onSelectionChange,
   onSortChange,
   pagination,
@@ -67,6 +79,7 @@ function Table<T>({
   selection = 'none',
   sort,
 }: TableProps<T>) {
+  const labels = useLabels()
   const [internalSelectedKeys, setInternalSelectedKeys] =
     useState<string[]>(defaultSelectedKeys)
 
@@ -76,22 +89,13 @@ function Table<T>({
     : internalSelectedKeys
 
   const visibleColumns = columns.filter((col) => !col.hide)
-  const selectionColumnWidth = selection === 'multiple' ? 40 : 0
-  const columnWidth = visibleColumns.reduce(
-    (acc, col) => acc + (col.width ?? 1),
-    selectionColumnWidth,
-  )
-  const totalWidth = Math.max(columnWidth, layoutWidth ?? columnWidth)
-  const spacerWidth = totalWidth - columnWidth
-  const spacerIndex =
-    visibleColumns.length > 1 ? visibleColumns.length - 1 : undefined
-  const hasSpacer = spacerWidth > 0 && spacerIndex !== undefined
-  const totalColumns =
-    visibleColumns.length +
-    (selection === 'multiple' ? 1 : 0) +
-    (hasSpacer ? 1 : 0)
+  const hasSelection = selection === 'multiple'
+  const layout = getTableLayout(visibleColumns, hasSelection, layoutWidth)
+  const { hasSpacer, spacerIndex, totalColumns, totalWidth } = layout
 
-  const isEmpty = !items || items.length === 0
+  const tableBody = getTableBody(outcome, items, loading)
+  const rows = tableBody.items
+  const isBusy = tableBody.loading
 
   const handleSelectionChange = (next: string[]) => {
     if (!isControlled) {
@@ -101,9 +105,8 @@ function Table<T>({
   }
 
   const handleSelectAll = (checked: boolean) => {
-    if (checked && items) {
-      const allKeys = items.map((item) => String(item[itemKey]))
-      handleSelectionChange(allKeys)
+    if (checked) {
+      handleSelectionChange(rows.map((item) => String(item[itemKey])))
     } else {
       handleSelectionChange([])
     }
@@ -146,12 +149,12 @@ function Table<T>({
 
   const getSortIcon = (columnKey: string) => {
     if (sort === columnKey) {
-      return <ArrowUp className="size-3.5" />
+      return <ArrowUp className="table-sort-icon size-3.5" />
     }
     if (sort === `-${columnKey}`) {
-      return <ArrowDown className="size-3.5" />
+      return <ArrowDown className="table-sort-icon size-3.5" />
     }
-    return <ArrowUpDown className="size-3.5" />
+    return <ArrowUpDown className="table-sort-icon size-3.5" />
   }
 
   const getAlignClass = (align?: 'left' | 'center' | 'right') => {
@@ -174,19 +177,9 @@ function Table<T>({
     return undefined
   }
 
-  const getColumnStyle = (width?: number): CSSProperties | undefined =>
-    width
-      ? {
-          width: `${(width / totalWidth) * 100}%`,
-        }
-      : undefined
-
-  const getSpacerStyle = (): CSSProperties | undefined =>
-    hasSpacer
-      ? {
-          width: `${(spacerWidth / totalWidth) * 100}%`,
-        }
-      : undefined
+  const getColumnStyle = (percentage: number): CSSProperties => ({
+    width: `${percentage}%`,
+  })
 
   const getColumnContentStyle = (width?: number): CSSProperties | undefined =>
     width
@@ -197,13 +190,147 @@ function Table<T>({
       : undefined
 
   const allSelected = Boolean(
-    items && items.length > 0 && selectedKeys.length === items.length,
+    rows.length > 0 && selectedKeys.length === rows.length,
   )
+
+  const renderStateRow = (content: React.ReactNode, testId: string) => (
+    <tr>
+      <td className={emptyCell()} colSpan={totalColumns} data-testid={testId}>
+        {content}
+      </td>
+    </tr>
+  )
+
+  const renderLoadingRows = () =>
+    Array.from(
+      {
+        length: loadingRows,
+      },
+      (_, index) => (
+        <tr className={row()} key={`table-loading-${index}`}>
+          {hasSelection && (
+            <td
+              className={cell({
+                className: 'w-10',
+              })}
+            >
+              <Skeleton />
+            </td>
+          )}
+          {visibleColumns.map((col, columnIndex) => (
+            <Fragment key={col.key}>
+              {hasSpacer && columnIndex === spacerIndex && (
+                <td aria-hidden className={cell()} />
+              )}
+              <td className={cell()}>
+                <Skeleton />
+              </td>
+            </Fragment>
+          ))}
+        </tr>
+      ),
+    )
+
+  const renderBody = () => {
+    if (tableBody.kind === 'pending') {
+      return renderLoadingRows()
+    }
+
+    if (tableBody.kind === 'denied') {
+      return renderStateRow(
+        deniedSection ?? (
+          <EmptyState
+            size="sm"
+            title={tableBody.reason ?? labels.table.error}
+          />
+        ),
+        'table-denied',
+      )
+    }
+
+    if (tableBody.kind === 'error') {
+      return renderStateRow(
+        errorSection ?? (
+          <EmptyState
+            action={
+              <Button onClick={tableBody.retry} type="button" variant="outline">
+                {labels.common.retry}
+              </Button>
+            }
+            size="sm"
+            title={labels.table.error}
+          />
+        ),
+        'table-error',
+      )
+    }
+
+    if (tableBody.kind === 'empty') {
+      return renderStateRow(emptySection ?? labels.table.empty, 'table-empty')
+    }
+
+    return rows.map((item, index) => {
+      const key = String(item[itemKey])
+      const isSelected = selectedKeys.includes(key)
+
+      return (
+        <tr
+          className={row({
+            className: onRowClick ? 'cursor-pointer' : undefined,
+          })}
+          data-state={isSelected ? 'selected' : undefined}
+          key={key}
+          onClick={(event) => handleRowClick(event, item)}
+        >
+          {hasSelection && (
+            <td
+              className={cell({
+                className: 'w-10',
+              })}
+            >
+              <Checkbox
+                checked={isSelected}
+                onChange={(checked) => handleSelectRow(key, checked)}
+              />
+            </td>
+          )}
+          {visibleColumns.map((col, columnIndex) => {
+            const align = col.align
+
+            return (
+              <Fragment key={col.key}>
+                {hasSpacer && columnIndex === spacerIndex && (
+                  <td aria-hidden className={cell()} />
+                )}
+                <td
+                  className={cell({
+                    className: getAlignClass(align),
+                  })}
+                >
+                  <div
+                    className={cellContent({
+                      className: getContentAlignClass(align),
+                    })}
+                    style={getColumnContentStyle(col.width)}
+                  >
+                    {col.selector
+                      ? col.selector(item, index)
+                      : (item[col.key as keyof T] as React.ReactNode)}
+                  </div>
+                </td>
+              </Fragment>
+            )
+          })}
+        </tr>
+      )
+    })
+  }
 
   return (
     <div className={root()}>
       <div className={container()}>
         <table
+          aria-busy={isBusy ? true : undefined}
           className={table()}
           style={
             layoutWidth
@@ -214,25 +341,21 @@ function Table<T>({
           }
         >
           <colgroup>
-            {selection === 'multiple' && (
-              <col
-                style={{
-                  width: `${(selectionColumnWidth / totalWidth) * 100}%`,
-                }}
-              />
+            {hasSelection && (
+              <col style={getColumnStyle(layout.selectionPercentage)} />
             )}
             {visibleColumns.map((col, index) => (
               <Fragment key={col.key}>
                 {hasSpacer && index === spacerIndex && (
-                  <col style={getSpacerStyle()} />
+                  <col style={getColumnStyle(layout.spacerPercentage)} />
                 )}
-                <col style={getColumnStyle(col.width)} />
+                <col style={getColumnStyle(layout.columns[index].percentage)} />
               </Fragment>
             ))}
           </colgroup>
           <thead className={header()}>
             <tr className={row()}>
-              {selection === 'multiple' && (
+              {hasSelection && (
                 <th
                   className={head({
                     className: 'w-10',
@@ -282,73 +405,9 @@ function Table<T>({
               })}
             </tr>
           </thead>
-          <tbody className={body()}>
-            {isEmpty ? (
-              <tr>
-                <td className={emptyCell()} colSpan={totalColumns}>
-                  {emptySection ?? 'Nenhum registro encontrado'}
-                </td>
-              </tr>
-            ) : (
-              items.map((item, index) => {
-                const key = String(item[itemKey])
-                const isSelected = selectedKeys.includes(key)
-
-                return (
-                  <tr
-                    className={row({
-                      className: onRowClick ? 'cursor-pointer' : undefined,
-                    })}
-                    data-state={isSelected ? 'selected' : undefined}
-                    key={key}
-                    onClick={(event) => handleRowClick(event, item)}
-                  >
-                    {selection === 'multiple' && (
-                      <td
-                        className={cell({
-                          className: 'w-10',
-                        })}
-                      >
-                        <Checkbox
-                          checked={isSelected}
-                          onChange={(checked) => handleSelectRow(key, checked)}
-                        />
-                      </td>
-                    )}
-                    {visibleColumns.map((col, columnIndex) => {
-                      const align = col.align
-
-                      return (
-                        <Fragment key={col.key}>
-                          {hasSpacer && columnIndex === spacerIndex && (
-                            <td aria-hidden className={cell()} />
-                          )}
-                          <td
-                            className={cell({
-                              className: getAlignClass(align),
-                            })}
-                          >
-                            <div
-                              className={cellContent({
-                                className: getContentAlignClass(align),
-                              })}
-                              style={getColumnContentStyle(col.width)}
-                            >
-                              {col.selector
-                                ? col.selector(item, index)
-                                : (item[col.key as keyof T] as React.ReactNode)}
-                            </div>
-                          </td>
-                        </Fragment>
-                      )
-                    })}
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
+          <tbody className={body()}>{renderBody()}</tbody>
         </table>
-        <LoadingOverlay visible={loading} />
+        <LoadingOverlay visible={isBusy} />
       </div>
       {pagination && !hidePagination && <Pagination {...pagination} />}
     </div>

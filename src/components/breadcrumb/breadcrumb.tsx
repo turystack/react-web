@@ -5,7 +5,10 @@ import {
   type ReactElement,
 } from 'react'
 import { tv } from 'tailwind-variants'
+import { useLabels } from '@/components/labels-provider'
 import { ChevronRight, MoreHorizontal } from '@/internal/icons'
+
+import { cn } from '@/support/utils'
 
 import type { BreadcrumbLinkProps } from './breadcrumb.types'
 
@@ -58,10 +61,14 @@ function BreadcrumbLink({
   children,
 }: PropsWithChildren<BreadcrumbLinkProps>) {
   if (asChild && isValidElement(children)) {
-    return cloneElement(children as ReactElement<Record<string, unknown>>, {
-      className: link(),
+    const child = children as ReactElement<{
+      className?: string
+    }>
+
+    return cloneElement(child, {
+      className: cn(link(), child.props.className),
       'data-testid': 'breadcrumb-link',
-    })
+    } as Record<string, unknown>)
   }
 
   return (
@@ -93,15 +100,16 @@ function BreadcrumbSeparator({ children }: PropsWithChildren) {
 }
 
 function BreadcrumbEllipsis() {
+  const labels = useLabels()
+
   return (
     <span
-      aria-hidden="true"
+      aria-label={labels.breadcrumb.more}
       className={ellipsis()}
       data-testid="breadcrumb-ellipsis"
-      role="presentation"
+      role="img"
     >
-      <MoreHorizontal />
-      <span className="sr-only">More</span>
+      <MoreHorizontal aria-hidden="true" />
     </span>
   )
 }

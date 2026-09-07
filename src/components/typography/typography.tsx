@@ -3,8 +3,19 @@ import { tv } from 'tailwind-variants'
 
 import type { TypographyProps } from './typography.types'
 
-const typography = tv({
+/**
+ * The error colour is declared as a compound variant because tailwind-merge
+ * keeps the last colour it sees: emitted from `variants`, `text-destructive`
+ * lands before `variant`'s own colour and is dropped in every combination.
+ */
+const typographyStyles = tv({
   base: 'typography',
+  compoundVariants: [
+    {
+      class: 'text-destructive',
+      destructive: true,
+    },
+  ],
   defaultVariants: {
     size: 'base',
     variant: 'default',
@@ -20,7 +31,7 @@ const typography = tv({
       true: 'mx-auto',
     },
     destructive: {
-      true: 'text-destructive',
+      true: '',
     },
     maxWidth: {
       lg: 'max-w-lg',
@@ -37,7 +48,7 @@ const typography = tv({
       '7xl': 'text-7xl',
       '8xl': 'text-8xl',
       '9xl': 'text-9xl',
-      base: 'text-base',
+      base: 'typography text-base',
       lg: 'text-lg',
       sm: 'text-sm',
       xl: 'text-xl',
@@ -78,7 +89,7 @@ function Typography({
 }: PropsWithChildren<TypographyProps>) {
   return (
     <Component
-      className={typography({
+      className={typographyStyles({
         align,
         centered,
         destructive,
@@ -95,4 +106,4 @@ function Typography({
   )
 }
 
-export { Typography }
+export { Typography, typographyStyles }

@@ -1,13 +1,12 @@
+import { useDisclosure } from '@turystack/react-hooks'
 import type React from 'react'
 import { useCallback } from 'react'
-
 import { Confirm } from '@/components/confirm'
-import type { ConfirmProps } from '@/components/confirm/confirm.types'
-
-import { useDisclosure } from './use-disclosure'
+import type { ConfirmSimpleProps } from '@/components/confirm/confirm.types'
+import { useLabels } from '@/components/labels-provider'
 
 export type UnsavedOptions = {
-  confirm?: Omit<ConfirmProps, 'open' | 'onConfirm' | 'onClose'>
+  confirm?: Omit<ConfirmSimpleProps, 'open' | 'onConfirm' | 'onClose'>
   unsaved?: boolean
   leaving?: boolean
   onProceed?: () => void
@@ -23,16 +22,18 @@ export type UnsavedConfirmProps = {
 }
 
 function UnsavedConfirm({ confirm, ...props }: UnsavedConfirmProps) {
+  const labels = useLabels()
+
   return (
     <Confirm
       {...props}
-      cancelText="Continuar editando"
+      cancelText={labels.unsaved.cancel}
       confirmProps={{
         variant: 'destructive',
       }}
-      confirmText="Sair sem salvar"
-      description="Você tem alterações não salvas. Sair agora fará você perder as mudanças."
-      title="Deseja sair sem salvar?"
+      confirmText={labels.unsaved.confirm}
+      description={labels.unsaved.description}
+      title={labels.unsaved.title}
       {...confirm}
     />
   )

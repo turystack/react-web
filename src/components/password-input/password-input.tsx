@@ -11,6 +11,7 @@ import type {
 const passwordInput = tv({
   slots: {
     root: 'password-input-root flex flex-col gap-2',
+    sections: 'password-input-sections flex items-center gap-1.5',
     strengthBar:
       'password-input-strength-bar h-1 flex-1 rounded-full transition-colors',
     strengthBars: 'password-input-strength-bars flex gap-1',
@@ -81,20 +82,39 @@ function getStrengthLevel(password: string): PasswordStrengthLevel {
 function PasswordInput({
   showStrength,
   value,
+  defaultValue,
+  rightSection,
   onChange,
   ...props
 }: PasswordInputProps) {
   const [visible, setVisible] = useState(false)
-  const { root, strengthBars, strengthBar, strengthFooter, strengthLabel } =
-    passwordInput()
+  const [typedValue, setTypedValue] = useState(defaultValue ?? '')
+  const {
+    root,
+    sections,
+    strengthBars,
+    strengthBar,
+    strengthFooter,
+    strengthLabel,
+  } = passwordInput()
 
-  const level = showStrength && value ? getStrengthLevel(value) : null
+  const isControlled = value !== undefined
+  const password = isControlled ? (value ?? '') : typedValue
+
+  const level = showStrength && password ? getStrengthLevel(password) : null
   const score = level ? strengthLevelScore[level] : 0
   const activeColor = level ? strengthLevelColors[level] : 'bg-muted'
 
+  const handleChange = (next: string | null) => {
+    if (!isControlled) {
+      setTypedValue(next ?? '')
+    }
+    onChange?.(next)
+  }
+
   const toggle = (
     <button
-      className="pointer-events-auto flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
+      className="password-input-toggle pointer-events-auto flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
       onClick={() => setVisible((v) => !v)}
       tabIndex={-1}
       type="button"
@@ -107,8 +127,14 @@ function PasswordInput({
     <div className={root()} data-testid="password-input-root">
       <Input
         {...props}
-        onChange={onChange}
-        rightSection={toggle}
+        defaultValue={defaultValue}
+        onChange={handleChange}
+        rightSection={
+          <span className={sections()}>
+            {rightSection}
+            {toggle}
+          </span>
+        }
         type={visible ? 'text' : 'password'}
         value={value}
       />

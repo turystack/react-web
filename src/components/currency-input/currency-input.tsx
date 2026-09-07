@@ -1,13 +1,23 @@
 import { Button as ButtonPrimitive } from '@base-ui/react'
+import { useDebounceCallback } from '@turystack/react-hooks'
 import { useRef, useState } from 'react'
 import { IMaskInput } from 'react-imask'
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
 import { DropdownMenu } from '@/components/dropdown-menu'
 import { Input } from '@/components/input'
-import { inputShared } from '@/components/input/input.shared'
+import {
+  DEBOUNCE_MS,
+  DEFAULT_SECTION_WIDTH,
+  inputShared,
+} from '@/components/input/input.shared'
+import type { TuryLabels } from '@/components/labels-provider'
+import { useLabels } from '@/components/labels-provider'
+import { Loader } from '@/components/loader'
 import { Popover } from '@/components/popover'
-import { ChevronsUpDown, X } from '@/internal/icons'
+import type { CurrencyConfig } from '@/internal/currency'
+import { CURRENCY_CONFIGS } from '@/internal/currency'
+import { ChevronDown, X } from '@/internal/icons'
 
 import { buttonShared } from '../button/button.shared'
 import type { InputSize } from '../input/input.types'
@@ -18,38 +28,6 @@ import type {
   CurrencyInputRangeValue,
   CurrencyInputSingleProps,
 } from './currency-input.types'
-
-type CurrencyConfig = {
-  symbol: string
-  thousandsSeparator: string
-  radix: string
-  label: string
-  locale: string
-}
-
-const CURRENCY_CONFIGS: Record<Currency, CurrencyConfig> = {
-  brl: {
-    label: 'BRL',
-    locale: 'pt-BR',
-    radix: ',',
-    symbol: 'R$',
-    thousandsSeparator: '.',
-  },
-  eur: {
-    label: 'EUR',
-    locale: 'de-DE',
-    radix: ',',
-    symbol: '€',
-    thousandsSeparator: '.',
-  },
-  usd: {
-    label: 'USD',
-    locale: 'en-US',
-    radix: '.',
-    symbol: '$',
-    thousandsSeparator: ',',
-  },
-}
 
 function parseCurrencyValue(
   val: string,
@@ -67,15 +45,18 @@ function parseCurrencyValue(
 }
 
 const rootStyles = tv({
-  base: 'flex',
+  base: 'currency-input-root flex',
 })
 
 const triggerStyles = tv({
-  base: buttonShared({
-    className:
-      'gap-1 rounded-s-lg rounded-e-none border-r-0 bg-transparent px-3 focus:z-10 aria-expanded:border-ring aria-expanded:ring-3 aria-expanded:ring-ring/50 data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/50 dark:bg-input/30',
-    variant: 'outline',
-  }),
+  base: [
+    'currency-input-trigger',
+    buttonShared({
+      className:
+        'gap-1 rounded-s-lg rounded-e-none border-r-0 bg-transparent px-3 focus:z-10 aria-expanded:border-ring aria-expanded:ring-3 aria-expanded:ring-ring/50 data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/50 dark:bg-input/30',
+      variant: 'outline',
+    }),
+  ],
   defaultVariants: {
     size: 'md',
   },
@@ -89,7 +70,7 @@ const triggerStyles = tv({
 })
 
 const symbolStyles = tv({
-  base: 'inline-flex shrink-0 items-center justify-center rounded-s-lg rounded-e-none border border-border border-r-0 bg-transparent px-3 font-medium text-muted-foreground text-sm dark:bg-input/30',
+  base: 'currency-input-symbol inline-flex shrink-0 items-center justify-center rounded-s-lg rounded-e-none border border-border border-r-0 bg-transparent px-3 font-medium text-muted-foreground text-sm dark:bg-input/30',
   defaultVariants: {
     size: 'md',
   },
@@ -102,9 +83,13 @@ const symbolStyles = tv({
   },
 })
 
+const fieldWrapperStyles = tv({
+  base: 'currency-input-field-wrapper relative flex w-full items-center',
+})
+
 const inputFieldStyles = tv({
   base: [
-    'rounded-s-none rounded-e-lg',
+    'currency-input-field rounded-s-none rounded-e-lg',
     'border border-input bg-transparent transition-colors',
     'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
     'disabled:pointer-events-none disabled:bg-input/50 disabled:opacity-50',
@@ -117,12 +102,13 @@ const inputFieldStyles = tv({
 const rangeStyles = tv({
   slots: {
     actions:
-      'flex items-center justify-end gap-2 border-border border-t bg-background px-3 py-2',
+      'currency-input-actions flex items-center justify-end gap-2 border-border border-t bg-background px-3 py-2',
     clearTrigger:
-      'visible cursor-pointer text-muted-foreground hover:text-foreground',
-    content: 'flex flex-col gap-3 rounded-[inherit] bg-background p-3',
-    fields: 'grid grid-cols-2 gap-2',
-    root: 'currency-input-range-root',
+      'currency-input-clear-trigger visible cursor-pointer text-muted-foreground hover:text-foreground',
+    content:
+      'currency-input-content flex flex-col gap-3 rounded-[inherit] bg-background p-3',
+    fields: 'currency-input-fields grid grid-cols-2 gap-2',
+    rangeRoot: 'currency-input-range-root',
   },
   variants: {
     disabled: {
@@ -157,6 +143,7 @@ function formatCurrencyValue(
 function formatCurrencyRange(
   range: CurrencyInputRangeValue | null | undefined,
   config: CurrencyConfig,
+  labels: TuryLabels['common'],
 ): string {
   if (!range) {
     return ''
@@ -170,11 +157,11 @@ function formatCurrencyRange(
   }
 
   if (from) {
-    return `A partir de ${from}`
+    return labels.from(from)
   }
 
   if (to) {
-    return `Até ${to}`
+    return labels.upTo(to)
   }
 
   return ''
@@ -209,6 +196,7 @@ function copyRange(
 }
 
 function CurrencySingleInput({
+  mode: _mode,
   variant = 'brl',
   value,
   defaultValue,
@@ -216,6 +204,15 @@ function CurrencySingleInput({
   disabled,
   size,
   placeholder,
+  leftSection,
+  leftSectionWidth = DEFAULT_SECTION_WIDTH,
+  rightSection,
+  rightSectionWidth = DEFAULT_SECTION_WIDTH,
+  loading,
+  debounce,
+  rootClassName,
+  className,
+  ...props
 }: CurrencyInputSingleProps) {
   const [internalCurrency, setInternalCurrency] = useState<Currency>(
     variant === 'any' ? 'brl' : (variant as Currency),
@@ -225,9 +222,29 @@ function CurrencySingleInput({
     variant === 'any' ? internalCurrency : (variant as Currency)
   const config = CURRENCY_CONFIGS[activeCurrency]
 
-  const { field } = inputShared({
+  const { field, section } = inputShared({
     size,
   })
+
+  const effectiveRight = loading ? <Loader size="sm" /> : rightSection
+  const hasLeft = Boolean(leftSection)
+  const hasRight = Boolean(effectiveRight)
+
+  const emitDebounced = useDebounceCallback(
+    (next: number | null) => onChange?.(next),
+    DEBOUNCE_MS,
+  )
+
+  const emitChange = (next: number | null) => {
+    if (!onChange) {
+      return
+    }
+    if (!debounce) {
+      onChange(next)
+      return
+    }
+    emitDebounced(next)
+  }
 
   const formatNumber = (cents: number | null | undefined): string =>
     cents === null || cents === undefined
@@ -260,7 +277,12 @@ function CurrencySingleInput({
   }
 
   return (
-    <div className={rootStyles()} data-testid="currency-input-root">
+    <div
+      className={rootStyles({
+        className: rootClassName,
+      })}
+      data-testid="currency-input-root"
+    >
       {variant === 'any' ? (
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
@@ -273,7 +295,7 @@ function CurrencySingleInput({
               type="button"
             >
               {config.label}
-              <ChevronsUpDown className="size-4 opacity-50" />
+              <ChevronDown className="currency-input-trigger-icon size-4 opacity-50" />
             </ButtonPrimitive>
           </DropdownMenu.Trigger>
           <DropdownMenu.Content sideOffset={4} width={100}>
@@ -294,50 +316,100 @@ function CurrencySingleInput({
             className: disabled ? 'opacity-50' : undefined,
             size,
           })}
-          data-testid="currency-input-section-left"
+          data-testid="currency-input-symbol"
         >
           {config.symbol}
         </span>
       )}
-      <IMaskInput
-        className={field({
-          className: inputFieldStyles(),
-        })}
-        data-testid="currency-input-field"
-        disabled={disabled}
-        mask={Number as unknown as string}
-        normalizeZeros
-        onAccept={(val: string) => {
-          setDisplay(val)
-          onChange?.(parseCurrencyValue(val, config))
-        }}
-        padFractionalZeros
-        placeholder={placeholder}
-        radix={config.radix}
-        scale={2}
-        thousandsSeparator={config.thousandsSeparator}
-        value={display}
-      />
+      <div className={fieldWrapperStyles()}>
+        {hasLeft && (
+          <span
+            className={section({
+              className: 'left-0 justify-center',
+            })}
+            data-testid="currency-input-section-left"
+            style={{
+              width: leftSectionWidth,
+            }}
+          >
+            {leftSection}
+          </span>
+        )}
+        <IMaskInput
+          {...(props as object)}
+          aria-busy={loading || undefined}
+          className={field({
+            className: inputFieldStyles({
+              className,
+            }),
+          })}
+          data-testid="currency-input-field"
+          disabled={disabled || loading}
+          mask={Number as unknown as string}
+          normalizeZeros
+          /**
+           * The mask re-formats whatever it is handed, so it accepts on mount
+           * and on every programmatic write. Only an accept carrying an input
+           * event came from the person at the keyboard.
+           */
+          onAccept={(val: string, _mask: unknown, event?: InputEvent) => {
+            setDisplay(val)
+            if (event) {
+              emitChange(parseCurrencyValue(val, config))
+            }
+          }}
+          padFractionalZeros
+          placeholder={placeholder}
+          radix={config.radix}
+          scale={2}
+          style={{
+            ...(hasLeft
+              ? {
+                  paddingLeft: leftSectionWidth,
+                }
+              : {}),
+            ...(hasRight
+              ? {
+                  paddingRight: rightSectionWidth,
+                }
+              : {}),
+          }}
+          thousandsSeparator={config.thousandsSeparator}
+          value={display}
+        />
+        {hasRight && (
+          <span
+            className={section({
+              className: 'pointer-events-auto right-0 justify-center',
+            })}
+            data-testid="currency-input-section-right"
+            style={{
+              width: rightSectionWidth,
+            }}
+          >
+            {effectiveRight}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
 
 function CurrencyRangeInput({
+  mode: _mode,
   variant = 'brl',
   value,
   defaultValue,
   onChange,
   disabled,
   size,
-  placeholder = 'Filtre por valor',
-  fromPlaceholder = 'Valor mínimo',
-  toPlaceholder = 'Valor máximo',
+  placeholder,
+  fromPlaceholder,
+  toPlaceholder,
   ...props
 }: CurrencyInputRangeProps) {
+  const labels = useLabels()
   const [open, setOpen] = useState(false)
-  const [internalCurrency] = useState<Currency>(
-    variant === 'any' ? 'brl' : (variant as Currency),
-  )
   const [internalRange, setInternalRange] = useState<
     CurrencyInputRangeValue | null | undefined
   >(defaultValue)
@@ -345,14 +417,12 @@ function CurrencyRangeInput({
     copyRange(defaultValue),
   )
 
-  const activeCurrency =
-    variant === 'any' ? internalCurrency : (variant as Currency)
-  const config = CURRENCY_CONFIGS[activeCurrency]
+  const config = CURRENCY_CONFIGS[variant]
   const isControlled = value !== undefined
   const selectedRange = isControlled ? value : internalRange
-  const displayValue = formatCurrencyRange(selectedRange, config)
+  const displayValue = formatCurrencyRange(selectedRange, config, labels.common)
   const hasValue = !!displayValue
-  const { actions, clearTrigger, content, fields, root } = rangeStyles()
+  const { actions, clearTrigger, content, fields, rangeRoot } = rangeStyles()
 
   function commit(nextRange: CurrencyInputRangeValue | null | undefined) {
     const normalized = normalizeRange(nextRange)
@@ -417,18 +487,18 @@ function CurrencyRangeInput({
               <CurrencySingleInput
                 disabled={disabled}
                 onChange={handleFromChange}
-                placeholder={fromPlaceholder}
+                placeholder={fromPlaceholder ?? labels.currencyInput.minimum}
                 size={size}
                 value={draftRange?.from ?? null}
-                variant={activeCurrency}
+                variant={variant}
               />
               <CurrencySingleInput
                 disabled={disabled}
                 onChange={handleToChange}
-                placeholder={toPlaceholder}
+                placeholder={toPlaceholder ?? labels.currencyInput.maximum}
                 size={size}
                 value={draftRange?.to ?? null}
-                variant={activeCurrency}
+                variant={variant}
               />
             </div>
           </div>
@@ -439,10 +509,10 @@ function CurrencyRangeInput({
               size="sm"
               variant="ghost"
             >
-              Cancelar
+              {labels.common.cancel}
             </Button>
             <Button disabled={disabled} onClick={handleConfirm} size="sm">
-              Aplicar
+              {labels.common.apply}
             </Button>
           </div>
         </>
@@ -455,17 +525,18 @@ function CurrencyRangeInput({
     >
       <Input
         {...props}
-        className={root()}
+        className={rangeRoot()}
         disabled={disabled}
         leftSection={
-          <span className="font-medium text-muted-foreground text-sm leading-none">
+          <span className="currency-input-symbol font-medium text-muted-foreground text-sm leading-none">
             {config.symbol}
           </span>
         }
-        placeholder={placeholder}
+        placeholder={placeholder ?? labels.currencyInput.rangePlaceholder}
         readOnly
         rightSection={
           <ButtonPrimitive
+            aria-label={labels.common.clear}
             className={clearTrigger({
               disabled,
               hasValue,
@@ -475,7 +546,7 @@ function CurrencyRangeInput({
             tabIndex={hasValue && !disabled ? 0 : -1}
             type="button"
           >
-            <X className="size-4" />
+            <X className="currency-input-clear-icon size-4" />
           </ButtonPrimitive>
         }
         size={size}

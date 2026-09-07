@@ -14,6 +14,7 @@ import {
 } from 'react'
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
+import { useLabels } from '@/components/labels-provider'
 import { Check, ChevronLeft, ChevronRight, Loader2 } from '@/internal/icons'
 import { cn } from '@/support/utils'
 
@@ -30,7 +31,72 @@ import type {
 } from './stepper.types'
 
 const stepper = tv({
+  // Two entries can set the vertical offset that centres the connector under
+  // the indicator, and tailwind-variants keeps the last conflicting utility, so
+  // the dotted entry has to stay after the size entries to win that margin.
+  // The min size on each connector is what guarantees the rule is drawn at all:
+  // its flex-1 only wins space once the step grows, and a step with no free
+  // space around it would otherwise resolve that flex-1 to zero.
+  compoundVariants: [
+    {
+      class: {
+        connector: 'h-0.5 min-w-4',
+      },
+      connector: 'line',
+      orientation: 'horizontal',
+    },
+    {
+      class: {
+        connector: 'h-0 min-w-4 border-t-2 border-dashed',
+      },
+      connector: 'dashed',
+      orientation: 'horizontal',
+    },
+    {
+      class: {
+        connector: 'min-h-4 w-0.5',
+      },
+      connector: 'line',
+      orientation: 'vertical',
+    },
+    {
+      class: {
+        connector: 'min-h-4 w-0 border-l-2 border-dashed',
+      },
+      connector: 'dashed',
+      orientation: 'vertical',
+    },
+    {
+      class: {
+        connector: 'ms-6',
+      },
+      orientation: 'vertical',
+      size: 'lg',
+    },
+    {
+      class: {
+        connector: 'ms-5',
+      },
+      orientation: 'vertical',
+      size: 'md',
+    },
+    {
+      class: {
+        connector: 'ms-4',
+      },
+      orientation: 'vertical',
+      size: 'sm',
+    },
+    {
+      class: {
+        connector: 'ms-2',
+      },
+      orientation: 'vertical',
+      variant: 'dotted',
+    },
+  ],
   defaultVariants: {
+    connector: 'line',
     iconPosition: 'left',
     orientation: 'horizontal',
     radius: 'xl',
@@ -40,8 +106,7 @@ const stepper = tv({
   },
   slots: {
     completed: 'stepper-completed mt-4 flex-1 outline-none',
-    connector:
-      'stepper-connector flex-1 bg-border transition-colors data-[state=stepCompleted]:bg-primary',
+    connector: 'stepper-connector flex-1 transition-colors',
     content:
       'stepper-content mt-4 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
     description: 'stepper-description text-muted-foreground text-xs',
@@ -57,6 +122,17 @@ const stepper = tv({
     triggerBody: 'stepper-trigger-body flex min-w-0 flex-col text-left',
   },
   variants: {
+    connector: {
+      dashed: {
+        connector: 'border-border data-[state=stepCompleted]:border-primary',
+        step: 'grow last:grow-0',
+      },
+      line: {
+        connector: 'bg-border data-[state=stepCompleted]:bg-primary',
+        step: 'grow last:grow-0',
+      },
+      none: {},
+    },
     iconPosition: {
       left: {
         trigger: 'flex-row',
@@ -115,7 +191,7 @@ const stepper = tv({
     },
     variant: {
       dotted: {
-        indicator: 'size-2.5 [&>*]:hidden',
+        indicator: 'size-2.5',
       },
       icon: {},
       numbered: {},
@@ -225,6 +301,7 @@ function StepperRoot({
   autoFocus = false,
   children,
   completedIcon,
+  connector = 'line',
   icon,
   iconPosition = 'left',
   iconSize,
@@ -237,7 +314,9 @@ function StepperRoot({
   variant = 'numbered',
   wrap = true,
 }: React.PropsWithChildren<StepperProps>) {
+  const labels = useLabels()
   const styles = stepper({
+    connector,
     iconPosition,
     orientation,
     radius,
@@ -353,12 +432,13 @@ function StepperRoot({
 
   const liveLabel = (() => {
     if (showCompleted) {
-      return 'Concluído'
+      return labels.stepper.completed
     }
     const current = stepElements[active]
     const labelNode = current?.props.label
     const label = typeof labelNode === 'string' ? labelNode : ''
-    return `Etapa ${active + 1} de ${totalSteps}${label ? `: ${label}` : ''}`
+    const step = labels.stepper.step(active + 1, totalSteps)
+    return label ? `${step}: ${label}` : step
   })()
 
   return (
@@ -386,28 +466,31 @@ function StepperRoot({
               stepProps.allowStepSelect ??
               (allowNextStepsSelect || index < active)
             const isCurrent = index === active
+            const isBlocked = !allowClick && !isCurrent
             const fragmentProps: StepFragmentProps = {
               state,
               step: index,
             }
             const indicatorContent =
-              state === 'stepCompleted'
-                ? renderFragment(
-                    stepProps.completedIcon ?? completedIcon,
-                    <Check />,
-                    fragmentProps,
-                  )
-                : state === 'stepProgress' && stepProps.loading
+              variant === 'dotted'
+                ? null
+                : state === 'stepCompleted'
                   ? renderFragment(
-                      stepProps.progressIcon ?? progressIcon,
-                      <Loader2 className="animate-spin" />,
+                      stepProps.completedIcon ?? completedIcon,
+                      <Check />,
                       fragmentProps,
                     )
-                  : renderFragment(
-                      stepProps.icon ?? icon,
-                      index + 1,
-                      fragmentProps,
-                    )
+                  : state === 'stepProgress' && stepProps.loading
+                    ? renderFragment(
+                        stepProps.progressIcon ?? progressIcon,
+                        <Loader2 className="stepper-progress-icon animate-spin" />,
+                        fragmentProps,
+                      )
+                    : renderFragment(
+                        stepProps.icon ?? icon,
+                        index + 1,
+                        fragmentProps,
+                      )
 
             const handleClick = () => {
               if (!allowClick || isCurrent) {
@@ -425,11 +508,12 @@ function StepperRoot({
                 key={stepKey}
               >
                 <ButtonPrimitive
-                  aria-disabled={!allowClick}
+                  aria-disabled={isBlocked}
                   className={styles.trigger()}
                   data-slot="stepper-trigger"
                   data-state={state}
-                  disabled={!allowClick}
+                  disabled={isBlocked}
+                  id={`${baseId}-label-${index}`}
                   onClick={handleClick}
                   type="button"
                 >
@@ -467,14 +551,16 @@ function StepperRoot({
                     </span>
                   )}
                 </ButtonPrimitive>
-                {index < totalSteps - 1 && (
+                {connector !== 'none' && index < totalSteps - 1 && (
                   <span
                     aria-hidden
                     className={styles.connector()}
+                    data-connector={connector}
                     data-slot="stepper-connector"
                     data-state={
                       index < active ? 'stepCompleted' : 'stepInactive'
                     }
+                    data-testid="stepper-connector"
                   />
                 )}
               </li>
@@ -489,7 +575,7 @@ function StepperRoot({
         >
           {showCompleted ? (
             <section
-              aria-labelledby={`${baseId}-completed`}
+              aria-label={labels.stepper.completed}
               className={cn(styles.completed())}
               data-slot="stepper-completed"
               id={`${baseId}-completed`}
@@ -555,7 +641,7 @@ function StepperRoot({
         <span
           aria-atomic="true"
           aria-live="polite"
-          className="sr-only"
+          className="stepper-live-region sr-only"
           id={liveMessageId}
           role="status"
         >
@@ -579,6 +665,7 @@ function StepperCompleted(
 function StepperPrevious({
   children,
   disabled,
+  leftSection,
   loading,
   onClick,
   render,
@@ -586,6 +673,7 @@ function StepperPrevious({
   variant,
   ...props
 }: React.PropsWithChildren<StepperPreviousProps>) {
+  const labels = useLabels()
   const { active, isFirst, prev } = useStepperContext('Stepper.Previous')
   const isDisabled = disabled ?? isFirst
 
@@ -604,12 +692,7 @@ function StepperPrevious({
   if (render) {
     return render({
       disabled: isDisabled,
-      onClick: () => {
-        if (isDisabled) {
-          return
-        }
-        prev()
-      },
+      onClick: handleClick,
     })
   }
 
@@ -617,13 +700,13 @@ function StepperPrevious({
     <Button
       {...props}
       disabled={isDisabled}
-      leftSection={<ChevronLeft />}
+      leftSection={leftSection ?? <ChevronLeft />}
       loading={loading}
       onClick={handleClick}
       size={size ?? 'md'}
       variant={variant ?? 'outline'}
     >
-      {children ?? 'Voltar'}
+      {children ?? labels.stepper.previous}
     </Button>
   )
 }
@@ -636,10 +719,12 @@ function StepperNext({
   onClick,
   onLastClick,
   render,
+  rightSection,
   size,
   variant,
   ...props
 }: React.PropsWithChildren<StepperNextProps>) {
+  const labels = useLabels()
   const { active, isLast, next } = useStepperContext('Stepper.Next')
   const isDisabled = disabled ?? false
 
@@ -650,8 +735,9 @@ function StepperNext({
         return
       }
       onClick?.(event, active)
-      if (isLast) {
-        onLastClick?.()
+      if (isLast && onLastClick) {
+        onLastClick()
+        return
       }
       next()
     },
@@ -662,12 +748,7 @@ function StepperNext({
     return render({
       disabled: isDisabled,
       isLast,
-      onClick: () => {
-        if (isDisabled) {
-          return
-        }
-        next()
-      },
+      onClick: handleClick,
     })
   }
 
@@ -677,13 +758,13 @@ function StepperNext({
       disabled={isDisabled}
       loading={loading}
       onClick={handleClick}
-      rightSection={isLast ? undefined : <ChevronRight />}
+      rightSection={rightSection ?? (isLast ? undefined : <ChevronRight />)}
       size={size ?? 'md'}
       variant={variant ?? 'default'}
     >
       {isLast
-        ? (lastChildren ?? children ?? 'Concluir')
-        : (children ?? 'Avançar')}
+        ? (lastChildren ?? children ?? labels.stepper.finish)
+        : (children ?? labels.stepper.next)}
     </Button>
   )
 }

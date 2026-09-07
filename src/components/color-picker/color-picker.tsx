@@ -7,6 +7,8 @@ import {
   useState,
 } from 'react'
 import { tv } from 'tailwind-variants'
+import { useLabels } from '@/components/labels-provider'
+import { usePortalContainer } from '@/components/portal-provider'
 import { Check, ChevronDown } from '@/internal/icons'
 
 import type { ColorPickerProps } from './color-picker.types'
@@ -55,107 +57,87 @@ function normalizeHex(input: string): string | null {
   return `#${hex}`
 }
 
-const trigger = tv({
-  base: [
-    'color-picker-trigger flex w-full min-w-0 items-center gap-2',
-    'rounded-lg border border-input bg-transparent px-2.5 py-1 text-left',
-    'text-base outline-none transition-colors md:text-sm',
-    'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
-    'data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/50',
-    'disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50',
-    'aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20',
-    'dark:bg-input/30 dark:disabled:bg-input/80',
-    'dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40',
-  ],
+const colorPicker = tv({
   defaultVariants: {
     size: 'md',
   },
-  variants: {
-    size: {
-      lg: 'h-11',
-      md: 'h-10',
-      sm: 'h-9',
-    },
+  slots: {
+    checkIcon: 'color-picker-check-icon size-3.5 text-white drop-shadow-sm',
+    chevron:
+      'color-picker-chevron ml-auto size-4 shrink-0 text-muted-foreground transition-transform',
+    grid: 'color-picker-grid grid grid-cols-4 gap-1.5',
+    hexInput: [
+      'color-picker-hex-input mt-3 h-9 w-full rounded-md border border-input',
+      'bg-transparent px-2.5 py-1',
+      'font-mono text-sm uppercase outline-none transition-colors',
+      'placeholder:text-muted-foreground placeholder:normal-case',
+      'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
+      'disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50',
+      'dark:bg-input/30 dark:disabled:bg-input/80',
+    ],
+    popup: [
+      'color-picker-popup z-50 w-fit rounded-lg bg-popover p-3 text-popover-foreground',
+      'shadow-md outline-hidden ring-1 ring-foreground/10',
+      'origin-(--transform-origin)',
+      'data-[side=bottom]:slide-in-from-top-2',
+      'data-[side=left]:slide-in-from-right-2',
+      'data-[side=right]:slide-in-from-left-2',
+      'data-[side=top]:slide-in-from-bottom-2',
+      'data-open:fade-in-0 data-open:zoom-in-95 duration-100 data-open:animate-in',
+      'data-closed:fade-out-0 data-closed:zoom-out-95 data-closed:animate-out',
+    ],
+    previewSwatch:
+      'color-picker-preview-swatch inline-block shrink-0 rounded ring-1 ring-foreground/15',
+    swatch: [
+      'color-picker-swatch relative flex size-7 items-center justify-center rounded-md',
+      'cursor-pointer ring-1 ring-foreground/10 transition-transform',
+      'outline-none',
+      'hover:scale-110',
+      'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-popover',
+      'data-[selected=true]:ring-2 data-[selected=true]:ring-foreground data-[selected=true]:ring-offset-1 data-[selected=true]:ring-offset-popover',
+    ],
+    trigger: [
+      'color-picker-trigger flex w-full min-w-0 items-center gap-2',
+      'rounded-lg border border-input bg-transparent px-2.5 py-1 text-left',
+      'text-base outline-none transition-colors md:text-sm',
+      'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
+      'data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/50',
+      'disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50',
+      'aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20',
+      'dark:bg-input/30 dark:disabled:bg-input/80',
+      'dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40',
+    ],
+    valueText: 'color-picker-value-text truncate font-mono uppercase',
   },
-})
-
-const previewSwatch = tv({
-  base: 'inline-block shrink-0 rounded ring-1 ring-foreground/15',
-  defaultVariants: {
-    size: 'md',
-  },
-  variants: {
-    size: {
-      lg: 'size-5',
-      md: 'size-[18px]',
-      sm: 'size-4',
-    },
-  },
-})
-
-const popup = tv({
-  base: [
-    'color-picker-popup z-50 w-fit rounded-lg bg-popover p-3 text-popover-foreground',
-    'shadow-md outline-hidden ring-1 ring-foreground/10',
-    'origin-(--transform-origin)',
-    'data-[side=bottom]:slide-in-from-top-2',
-    'data-[side=left]:slide-in-from-right-2',
-    'data-[side=right]:slide-in-from-left-2',
-    'data-[side=top]:slide-in-from-bottom-2',
-    'data-open:fade-in-0 data-open:zoom-in-95 duration-100 data-open:animate-in',
-    'data-closed:fade-out-0 data-closed:zoom-out-95 data-closed:animate-out',
-  ],
-})
-
-const grid = tv({
-  base: 'grid grid-cols-4 gap-1.5',
-})
-
-const swatch = tv({
-  base: [
-    'relative flex size-7 items-center justify-center rounded-md',
-    'cursor-pointer ring-1 ring-foreground/10 transition-transform',
-    'outline-none',
-    'hover:scale-110',
-    'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-popover',
-    'data-[selected=true]:ring-2 data-[selected=true]:ring-foreground data-[selected=true]:ring-offset-1 data-[selected=true]:ring-offset-popover',
-  ],
-})
-
-const hexInput = tv({
-  base: [
-    'mt-3 h-9 w-full rounded-md border border-input bg-transparent px-2.5 py-1',
-    'font-mono text-sm uppercase outline-none transition-colors',
-    'placeholder:text-muted-foreground placeholder:normal-case',
-    'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
-    'disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50',
-    'dark:bg-input/30 dark:disabled:bg-input/80',
-  ],
-})
-
-const chevron = tv({
-  base: 'ml-auto size-4 shrink-0 text-muted-foreground transition-transform',
-  variants: {
-    open: {
-      true: 'rotate-180',
-    },
-  },
-})
-
-const valueText = tv({
-  base: 'truncate font-mono uppercase',
   variants: {
     empty: {
-      true: 'text-muted-foreground normal-case',
+      true: {
+        valueText: 'text-muted-foreground normal-case',
+      },
     },
-  },
-})
-
-const checkIcon = tv({
-  base: 'size-3.5 text-white drop-shadow-sm',
-  variants: {
     onLight: {
-      true: 'text-foreground',
+      true: {
+        checkIcon: 'text-foreground',
+      },
+    },
+    open: {
+      true: {
+        chevron: 'rotate-180',
+      },
+    },
+    size: {
+      lg: {
+        previewSwatch: 'size-5',
+        trigger: 'h-11',
+      },
+      md: {
+        previewSwatch: 'size-[18px]',
+        trigger: 'h-10',
+      },
+      sm: {
+        previewSwatch: 'size-4',
+        trigger: 'h-9',
+      },
     },
   },
 })
@@ -178,7 +160,7 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
       allowCustom = true,
       allowTransparent = false,
       size,
-      placeholder = 'Selecionar cor',
+      placeholder,
       disabled,
       invalid,
       name,
@@ -196,6 +178,21 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
     },
     ref,
   ) {
+    const labels = useLabels()
+    const portalContainer = usePortalContainer()
+    const {
+      checkIcon,
+      chevron,
+      grid,
+      hexInput,
+      popup,
+      previewSwatch,
+      swatch,
+      trigger,
+      valueText,
+    } = colorPicker({
+      size,
+    })
     const isControlled = value !== undefined
     const [internalValue, setInternalValue] = useState<string | null>(
       defaultValue ?? null,
@@ -278,9 +275,7 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
       <>
         <span
           aria-hidden="true"
-          className={previewSwatch({
-            size,
-          })}
+          className={previewSwatch()}
           data-testid="color-picker-trigger-swatch"
           style={{
             background:
@@ -297,9 +292,9 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
           })}
         >
           {currentValue === null
-            ? placeholder
+            ? (placeholder ?? labels.colorPicker.selectColor)
             : currentValue === TRANSPARENT_VALUE
-              ? 'Transparente'
+              ? labels.colorPicker.transparent
               : currentValue.toUpperCase()}
         </span>
         <ChevronDown
@@ -319,7 +314,6 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
               aria-label={ariaLabel}
               className={trigger({
                 className,
-                size,
               })}
               data-testid="color-picker-trigger"
               disabled={disabled}
@@ -332,10 +326,10 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
         >
           {triggerContent}
         </PopoverPrimitive.Trigger>
-        <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Portal container={portalContainer}>
           <PopoverPrimitive.Positioner
             align={align}
-            className="isolate z-50"
+            className="color-picker-positioner isolate z-50"
             side={side}
             sideOffset={sideOffset}
           >
@@ -352,7 +346,7 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
                     <button
                       aria-label={
                         color === TRANSPARENT_VALUE
-                          ? 'Transparente'
+                          ? labels.colorPicker.transparent
                           : color.toUpperCase()
                       }
                       aria-pressed={isSelected}

@@ -36,22 +36,50 @@ const rootStyles = tv({
 })
 
 const itemStyles = tv({
-  base: 'grid-item',
+  slots: {
+    item: 'grid-item',
+  },
   variants: {
     span: {
-      1: 'col-span-1',
-      2: 'col-span-2',
-      3: 'col-span-3',
-      4: 'col-span-4',
-      5: 'col-span-5',
-      6: 'col-span-6',
-      7: 'col-span-7',
-      8: 'col-span-8',
-      9: 'col-span-9',
-      10: 'col-span-10',
-      11: 'col-span-11',
-      12: 'col-span-12',
-      full: 'col-span-full',
+      1: {
+        item: 'col-span-1',
+      },
+      2: {
+        item: 'col-span-2',
+      },
+      3: {
+        item: 'col-span-3',
+      },
+      4: {
+        item: 'col-span-4',
+      },
+      5: {
+        item: 'col-span-5',
+      },
+      6: {
+        item: 'col-span-6',
+      },
+      7: {
+        item: 'col-span-7',
+      },
+      8: {
+        item: 'col-span-8',
+      },
+      9: {
+        item: 'col-span-9',
+      },
+      10: {
+        item: 'col-span-10',
+      },
+      11: {
+        item: 'col-span-11',
+      },
+      12: {
+        item: 'col-span-12',
+      },
+      full: {
+        item: 'col-span-full',
+      },
     },
   },
 })
@@ -71,13 +99,12 @@ function GridRoot({ children, cols, gap }: PropsWithChildren<GridProps>) {
 }
 
 function GridItem({ children, span }: PropsWithChildren<GridItemProps>) {
+  const { item } = itemStyles({
+    span,
+  })
+
   return (
-    <div
-      className={itemStyles({
-        span,
-      })}
-      data-testid="grid-item"
-    >
+    <div className={item()} data-testid="grid-item">
       {children}
     </div>
   )

@@ -10,15 +10,20 @@
  * - accept: MIME type filter (e.g. "image/*,.pdf")
  * - maxFiles: limits number of files
  * - maxFileSize: limits individual file size in bytes
+ * - onReject reports every file turned away by maxFiles or maxFileSize
  * - File list shows: filename, progress bar, remove button, status icon
- * - States per file: pending → uploading (with progress %) → done / error
+ * - States per file: pending (waiting for its signed destination) → uploading
+ *   (with progress %) → done / error
  * - handler(fileName) returns a signed POST payload, then uploads FormData
- * - onUpload fires with handler response(s) after successful upload
+ * - onUpload fires per file with the handler response and the file's position;
+ *   a file removed while in flight reports nothing
  *
  * Implementation:
  * - HTML5 File API + drag-and-drop events (onDragOver, onDrop)
  * - XMLHttpRequest + FormData for upload progress via xhr.upload.onprogress
- * - File state tracked in array: { file, progress, status, response }
+ * - File state tracked in array: { file, id, progress, status, response }
+ * - Rows are matched by id, never by position, so a removal mid-upload cannot
+ *   write one file's result onto its neighbour
  * - <Uploader accept="image/*" maxFiles={5} maxFileSize={5_000_000}
  *     handler={getSignedUrl} onUpload={handleUploaded} />
  *
@@ -37,21 +42,19 @@ export type UploaderHandlerResponse = {
   expiresIn: number
 }
 
-type BaseUploaderProps = {
+export type UploaderRejectionReason = 'maxFiles' | 'maxFileSize'
+
+export type UploaderRejection = {
+  file: File // the file that was turned away
+  reason: UploaderRejectionReason // which limit turned it away
+}
+
+export type UploaderProps = {
   accept?: string // accepted MIME types (e.g. 'image/*,.pdf')
   maxFiles?: number // maximum number of files
   maxFileSize?: number // max file size in bytes
   disabled?: boolean // prevents interaction
   handler: (fileName: string) => Promise<UploaderHandlerResponse> // upload handler (required)
-}
-
-type SingleUploaderProps = {
+  onReject?: (rejections: UploaderRejection[]) => void // fires with every file a limit turned away
   onUpload?: (response: UploaderHandlerResponse, index: number) => void // fires per file upload
 }
-
-type MultipleUploaderProps = {
-  onUpload?: (response: UploaderHandlerResponse[], index: number) => void // fires with all uploads
-}
-
-export type UploaderProps = BaseUploaderProps &
-  (SingleUploaderProps | MultipleUploaderProps)

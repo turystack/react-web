@@ -69,7 +69,9 @@ function Slider(props: SliderProps) {
         disabled={disabled}
         max={100}
         min={0}
-        onValueChange={onValueChange}
+        onValueChange={
+          onValueChange ? (val: number) => onValueChange(val) : undefined
+        }
         orientation={orientation}
         thumbAlignment="edge"
         value={value}

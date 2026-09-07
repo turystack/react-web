@@ -1,3 +1,4 @@
+import { useTimeout } from '@turystack/react-hooks'
 import {
   createContext,
   type PropsWithChildren,
@@ -18,27 +19,45 @@ import type {
   AlertTitleProps,
 } from './alert.types'
 
+const CLOSE_DURATION_MS = 200
+
 const alert = tv({
   defaultVariants: {
     variant: 'default',
   },
   slots: {
-    action: 'alert-action absolute top-2 right-2',
+    /**
+     * A real column, not an overlay. It used to be `absolute` over a root that
+     * reserved a fixed `pr-18`, which held only while the control stayed
+     * narrower than 4.5rem — a two-word button spilled left over the very
+     * description it was meant to sit beside, and reserving more padding only
+     * moves the width at which it breaks.
+     */
+    action: 'alert-action col-start-3 row-span-2 row-start-1 ml-3 self-start',
+    close: 'alert-close col-start-4 row-span-2 row-start-1 ml-1 self-start',
     description: [
-      'alert-description text-balance text-muted-foreground text-sm md:text-pretty',
+      'alert-description col-start-2 row-start-2 text-balance text-muted-foreground text-sm md:text-pretty',
       '[&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground',
       '[&_p:not(:last-child)]:mb-4',
     ],
-    icon: 'alert-icon row-span-2 translate-y-0.5 text-current [&_svg:not([class*=size-])]:size-4',
+    icon: [
+      'alert-icon col-start-1 row-span-2 row-start-1 mr-2 translate-y-0.5 text-current',
+      '[&_svg:not([class*=size-])]:size-4',
+    ],
+    /**
+     * Four `auto` columns and one `1fr`: an absent icon, action or close button
+     * leaves its column zero-wide, and the spacing rides on the parts' own
+     * margins rather than a column gap that would otherwise open a hole where
+     * the missing part used to be.
+     */
     root: [
-      'alert-root group/alert relative grid w-full gap-0.5 rounded-lg border px-2.5 py-2',
+      'alert-root',
+      'group/alert relative grid w-full grid-cols-[auto_1fr_auto_auto] gap-y-0.5',
+      'rounded-lg border px-2.5 py-2',
       'text-left text-sm transition-all duration-200',
-      'has-data-[slot=alert-action]:pr-18',
-      'has-[[data-testid=alert-icon]]:grid-cols-[auto_1fr] has-[[data-testid=alert-icon]]:gap-x-2',
     ],
     title: [
-      'alert-title font-heading font-medium',
-      'group-has-[[data-testid=alert-icon]]/alert:col-start-2',
+      'alert-title col-start-2 row-start-1 font-heading font-medium',
       '[&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground',
     ],
   },
@@ -78,12 +97,16 @@ function AlertRoot({
     setClosing(true)
   }, [])
 
-  const handleTransitionEnd = useCallback(() => {
-    if (closing) {
-      setVisible(false)
-      onClose?.()
-    }
-  }, [closing, onClose])
+  const finishClose = useCallback(() => {
+    setVisible(false)
+    onClose?.()
+  }, [onClose])
+
+  // `transitionend` is the only signal the close had, and it never arrives when
+  // the transition does not run — reduced motion, a hidden ancestor, a test
+  // environment. Without this fallback the alert stays invisible on screen and
+  // `onClose` never fires.
+  useTimeout(finishClose, closing ? CLOSE_DURATION_MS : null)
 
   if (!visible) {
     return null
@@ -93,9 +116,10 @@ function AlertRoot({
     <AlertContext.Provider value={slots}>
       <div
         className={root()}
+        data-closing={closing || undefined}
         data-slot="alert"
         data-testid="alert-root"
-        onTransitionEnd={handleTransitionEnd}
+        onTransitionEnd={closing ? finishClose : undefined}
         ref={rootRef}
         role="alert"
         style={
@@ -109,9 +133,14 @@ function AlertRoot({
       >
         {children}
         {closable && (
-          <div className="absolute top-2 right-2">
-            <Button onClick={handleClose} size="icon-sm" variant="ghost">
-              <X className="size-3.5" />
+          <div className={slots.close()} data-testid="alert-close">
+            <Button
+              ariaLabel="Close"
+              onClick={handleClose}
+              size="icon-sm"
+              variant="ghost"
+            >
+              <X className="alert-close-icon size-3.5" />
             </Button>
           </div>
         )}

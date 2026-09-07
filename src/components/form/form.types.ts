@@ -54,14 +54,6 @@ export type FormFieldProps = {
   error?: React.ReactNode // error message (renders in error state)
 }
 
-export type FormFieldLabelProps = {
-  htmlFor?: string // associates with input id
-  required?: boolean // shows required indicator
-  optional?: boolean // shows optional text
-  disabled?: boolean // applies disabled styling
-  tooltip?: React.ReactNode // tooltip next to label
-}
-
 export type FormFieldGroupProps = {
   children: React.ReactNode
 }

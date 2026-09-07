@@ -2,22 +2,29 @@
  * Skeleton
  *
  * Placeholder loading animation that mimics content shape.
- * Dimensions and shape are controlled entirely via className.
+ * Size and shape come from the contract, not from CSS.
  *
  * Behavior:
- * - Renders a pulsing muted rectangle
- * - Shape/size defined by className: h-4 w-[200px] rounded-full, etc.
- * - Block display with full width/height within its box
+ * - Renders a pulsing muted block
+ * - Width and height are picked from a token scale; both have a default, so a
+ *   Skeleton with no props is already visible
+ * - Shape decides the corner treatment; circle keeps a 1:1 ratio from height
  *
  * Implementation:
- * - Single <div> with animate-pulse, bg-muted, rounded-md
- * - <Skeleton className="h-4 w-[250px]" />
- * - <Skeleton className="h-12 w-12 rounded-full" /> for circular avatar placeholder
+ * - Single <div> with animate-pulse, bg-muted
+ * - <Skeleton width="lg" />
+ * - <Skeleton height="sm" shape="circle" width="xs" /> for an avatar placeholder
+ * - <Skeleton height="xl" /> for a card placeholder
  *
  * Dependencies: none (pure CSS animation)
  */
 
+export type SkeletonShape = 'rectangle' | 'circle' | 'text'
+
+export type SkeletonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full'
+
 export type SkeletonProps = {
-  className?: string // custom dimensions/shape via CSS classes (e.g. h-4 w-[200px] rounded-full)
-  style?: React.CSSProperties
+  height?: SkeletonSize // vertical size on the token scale (default 'sm')
+  shape?: SkeletonShape // corner treatment (default 'rectangle')
+  width?: SkeletonSize // horizontal size on the token scale (default 'full')
 }

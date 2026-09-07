@@ -7,7 +7,8 @@
  * Behavior:
  * - Offset mode: shows "X-Y of Z" with page prev/next buttons
  * - Cursor mode: shows prev/next buttons based on hasPreviousPage/hasNextPage
- * - Rows-per-page: dropdown selector with options [10, 20, 50, 100]
+ * - Rows-per-page: dropdown selector; options default to [10, 20, 50, 100]
+ * - Offset mode returns to the first page when the page size changes
  * - Buttons disabled when at first/last page
  *
  * Implementation:
@@ -24,6 +25,7 @@ type OffsetPaginationProps = {
   mode: 'offset' // traditional page-based pagination
   page: number // current page number (required)
   rowsPerPage: number // items per page (required)
+  rowsPerPageOptions?: number[] // page sizes offered in the selector
   total: number // total item count (required)
   onPageChange: (page: number) => void // fires on page navigation
   onRowsPerPageChange: (rowsPerPage: number) => void // fires on rows-per-page change
@@ -32,6 +34,7 @@ type OffsetPaginationProps = {
 type CursorPaginationProps = {
   mode: 'cursor' // cursor-based pagination (for infinite/API-driven)
   rowsPerPage: number // items per page
+  rowsPerPageOptions?: number[] // page sizes offered in the selector
   hasPreviousPage?: boolean // enables previous button
   hasNextPage?: boolean // enables next button
   onPreviousPage?: () => void // fires on previous navigation

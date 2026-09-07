@@ -2,6 +2,7 @@ import { Dialog } from '@base-ui/react/dialog'
 import type { MouseEvent, PropsWithChildren } from 'react'
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
+import { usePortalContainer } from '@/components/portal-provider'
 import { X } from '@/internal/icons'
 
 import type {
@@ -13,6 +14,38 @@ import type {
 
 const styles = tv({
   compoundVariants: [
+    {
+      class: {
+        popup:
+          'inset-x-auto bottom-4 left-1/2 h-auto w-auto max-w-[calc(100vw-2rem)] -translate-x-1/2 border-t',
+      },
+      side: 'bottom',
+      variant: 'floating',
+    },
+    {
+      class: {
+        popup:
+          'inset-x-auto top-4 left-1/2 h-auto w-auto max-w-[calc(100vw-2rem)] -translate-x-1/2 border-b',
+      },
+      side: 'top',
+      variant: 'floating',
+    },
+    {
+      class: {
+        popup:
+          'inset-y-auto top-1/2 right-4 h-auto w-auto max-h-[calc(100dvh-2rem)] -translate-y-1/2 border-l',
+      },
+      side: 'right',
+      variant: 'floating',
+    },
+    {
+      class: {
+        popup:
+          'inset-y-auto top-1/2 left-4 h-auto w-auto max-h-[calc(100dvh-2rem)] -translate-y-1/2 border-r',
+      },
+      side: 'left',
+      variant: 'floating',
+    },
     {
       bordered: true,
       class: {
@@ -58,6 +91,7 @@ const styles = tv({
   ],
   defaultVariants: {
     side: 'right',
+    variant: 'default',
   },
   slots: {
     backdrop: [
@@ -124,6 +158,12 @@ const styles = tv({
       sm: {},
       xl: {},
     },
+    variant: {
+      default: {},
+      floating: {
+        popup: 'rounded-xl border shadow-lg',
+      },
+    },
   },
 })
 
@@ -131,12 +171,17 @@ function SheetRoot({
   open,
   side = 'right',
   size,
+  variant = 'default',
+  modal = true,
+  dismissible = true,
   onChange,
   children,
 }: PropsWithChildren<SheetProps>) {
+  const portalContainer = usePortalContainer()
   const { backdrop, popup } = styles({
     side,
     size,
+    variant,
   })
 
   function handleOverlayClick(event: MouseEvent<HTMLDivElement>) {
@@ -144,17 +189,32 @@ function SheetRoot({
   }
 
   return (
-    <Dialog.Root onOpenChange={onChange} open={open}>
-      <Dialog.Portal>
-        <Dialog.Backdrop
-          className={backdrop()}
-          data-testid="sheet-backdrop"
-          onClick={handleOverlayClick}
-        />
+    <Dialog.Root
+      disablePointerDismissal={!dismissible}
+      modal={modal}
+      onOpenChange={
+        onChange ? (nextOpen: boolean) => onChange(nextOpen) : undefined
+      }
+      open={open}
+    >
+      <Dialog.Portal container={portalContainer}>
+        {/*
+          A non-modal sheet renders no backdrop at all. Rendering a transparent
+          one would still cover the page, and a surface that exists to comment
+          on what is behind it cannot be the thing blocking it.
+        */}
+        {modal ? (
+          <Dialog.Backdrop
+            className={backdrop()}
+            data-testid="sheet-backdrop"
+            onClick={handleOverlayClick}
+          />
+        ) : null}
         <Dialog.Popup
           className={popup()}
           data-side={side}
           data-testid="sheet-popup"
+          data-variant={variant}
           onClick={handleOverlayClick}
         >
           {children}
@@ -184,7 +244,7 @@ function SheetHeader({
             render={<Button size="icon-sm" variant="ghost" />}
           >
             <X />
-            <span className="sr-only">Close</span>
+            <span className="sheet-close-label sr-only">Close</span>
           </Dialog.Close>
         </div>
       )}

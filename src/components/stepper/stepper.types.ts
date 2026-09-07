@@ -1,14 +1,18 @@
 /**
  * Stepper
  *
- * Sequential, validated step navigation for multi-step flows (wizards, onboarding,
+ * Sequential step navigation for multi-step flows (wizards, onboarding,
  * checkout). Indicator list + active panel + optional Completed slot, with built-in
- * Previous / Next buttons that respect per-step async validators.
+ * Previous / Next buttons.
  *
  * Behavior:
  * - `active` is required and controlled by the consumer
- * - Default linear: `allowNextStepsSelect={false}` — only completed indicators are clickable
- * - `Stepper.Next` advances the active index synchronously
+ * - Default linear: `allowNextStepsSelect={false}` — only completed indicators are
+ *   clickable; the active indicator stays enabled and does nothing when clicked
+ * - `Stepper.Next` advances the active index synchronously, unless `onLastClick`
+ *   takes over on the last step
+ * - `connector` draws the rule between two steps ('line' by default, 'dashed',
+ *   or 'none'); it never follows the last step and it follows the orientation
  * - `keepMounted` keeps inactive panels in the DOM via `hidden` + `inert` (state preserved)
  * - `Stepper.Completed` renders when `active === stepCount`
  * - Animation via `tw-animate-css` data-state utilities; respects `prefers-reduced-motion`
@@ -34,6 +38,8 @@ export type StepperRadius = 'none' | 'sm' | 'md' | 'lg' | 'xl' | 'full'
 
 export type StepperVariant = 'numbered' | 'dotted' | 'icon'
 
+export type StepperConnector = 'none' | 'line' | 'dashed'
+
 export type StepperIconPosition = 'left' | 'right'
 
 export type StepState = 'stepInactive' | 'stepProgress' | 'stepCompleted'
@@ -52,11 +58,12 @@ export type StepperProps = {
   allowNextStepsSelect?: boolean // when true, indicators jump to any step (default false: linear)
   autoFocus?: boolean // focus active panel heading on advance (default false)
   completedIcon?: StepFragment // override completed indicator (default: check)
+  connector?: StepperConnector // rule drawn between two steps (default 'line')
   icon?: StepFragment // default indicator content (default: step + 1)
   iconPosition?: StepperIconPosition // indicator side relative to label (default 'left')
   iconSize?: string | number // override indicator size
   keepMounted?: boolean // keep inactive panels mounted via hidden + inert
-  onActiveChange?: (active: number) => void // fires after validate resolves true
+  onActiveChange?: (active: number) => void // fires when the active step changes
   orientation?: StepperOrientation // default 'horizontal'
   progressIcon?: StepFragment // shown when a step is loading
   radius?: StepperRadius // indicator border-radius (default 'xl')
@@ -87,7 +94,7 @@ export type StepperPreviousProps = Omit<ButtonProps, 'onClick' | 'type'> & {
     currentStep: number,
   ) => void
   render?: (slotProps: {
-    onClick: () => void
+    onClick: React.MouseEventHandler<HTMLButtonElement>
     disabled: boolean
   }) => React.ReactElement
 }
@@ -102,7 +109,7 @@ export type StepperNextProps = Omit<ButtonProps, 'onClick' | 'type'> & {
   render?: (slotProps: {
     disabled: boolean
     isLast: boolean
-    onClick: () => void
+    onClick: React.MouseEventHandler<HTMLButtonElement>
   }) => React.ReactElement
 }
 

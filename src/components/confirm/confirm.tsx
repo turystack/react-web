@@ -1,10 +1,13 @@
 import { AlertDialog } from '@base-ui/react/alert-dialog'
-import type { MouseEvent } from 'react'
+import type { FormEvent, MouseEvent } from 'react'
 import { useState } from 'react'
 import { tv } from 'tailwind-variants'
 
 import { Button } from '@/components/button'
+import { useLabels } from '@/components/labels-provider'
+import { usePortalContainer } from '@/components/portal-provider'
 
+import { useConfirmChallenge } from './confirm.challenge'
 import type { ConfirmProps } from './confirm.types'
 
 const confirm = tv({
@@ -14,7 +17,15 @@ const confirm = tv({
       'data-open:fade-in-0 duration-100 data-open:animate-in',
       'data-closed:fade-out-0 data-closed:animate-out',
     ],
+    content: 'confirm-content text-sm',
+    blocked: [
+      'confirm-blocked flex rounded-lg outline-none',
+      '[&>button]:w-full',
+      'focus-visible:ring-3 focus-visible:ring-ring/50',
+    ],
+    challenge: 'confirm-challenge flex flex-col gap-2',
     description: 'confirm-description text-muted-foreground text-sm',
+    error: 'confirm-error text-destructive text-sm',
     footer:
       'confirm-footer flex flex-col-reverse gap-2 sm:flex-row sm:justify-end',
     header: 'confirm-header flex flex-col gap-1.5',
@@ -29,30 +40,105 @@ const confirm = tv({
   },
 })
 
-const { backdrop, popup, header, title, description, footer } = confirm()
+const {
+  backdrop,
+  blocked,
+  challenge,
+  content: contentSlot,
+  description,
+  error,
+  footer,
+  header,
+  popup,
+  title,
+} = confirm()
 
-function Confirm({
-  open,
-  title: titleText,
-  description: descriptionText,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
-  confirmProps,
-  cancelProps,
-  onConfirm,
-  onCancel,
-  onClose,
-}: ConfirmProps) {
+function causeMessage(cause: unknown, fallback: string) {
+  return cause instanceof Error && cause.message ? cause.message : fallback
+}
+
+function Confirm(props: ConfirmProps) {
+  const {
+    open,
+    title: titleText,
+    description: descriptionText,
+    content,
+    confirmText,
+    cancelText,
+    confirmProps,
+    cancelProps,
+    onCancel,
+    onClose,
+  } = props
+
+  const labels = useLabels()
+  const portalContainer = usePortalContainer()
+
+  const mode = props.mode ?? 'simple'
+  const [failure, setFailure] = useState<string>()
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
 
+  const challengeState = useConfirmChallenge(
+    {
+      acknowledgement:
+        props.mode === 'acknowledge' ? props.acknowledgement : undefined,
+      challengeLabel:
+        props.mode === 'typed' ||
+        props.mode === 'password' ||
+        props.mode === 'otp'
+          ? props.challengeLabel
+          : undefined,
+      challengePlaceholder:
+        props.mode === 'typed' ||
+        props.mode === 'password' ||
+        props.mode === 'otp'
+          ? props.challengePlaceholder
+          : undefined,
+      confirmationValue:
+        props.mode === 'typed' ? props.confirmationValue : undefined,
+      mode,
+      otpPattern: props.mode === 'otp' ? props.otpPattern : undefined,
+    },
+    open,
+  )
+
+  const { blockedReason, collected, hintId } = challengeState
+
+  function runConfirm() {
+    if (
+      props.mode === 'typed' ||
+      props.mode === 'password' ||
+      props.mode === 'otp'
+    ) {
+      return props.onConfirm?.(collected)
+    }
+
+    return props.onConfirm?.()
+  }
+
   const handleConfirm = async () => {
+    if (blockedReason) {
+      return
+    }
+
+    setFailure(undefined)
     setConfirmLoading(true)
     try {
-      await Promise.resolve(onConfirm?.())
+      await Promise.resolve(runConfirm())
+    } catch (cause) {
+      setFailure(causeMessage(cause, labels.confirm.error))
+
+      return
     } finally {
       setConfirmLoading(false)
     }
+    onClose?.()
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    await handleConfirm()
   }
 
   const handleCancel = async () => {
@@ -68,20 +154,38 @@ function Confirm({
     event.stopPropagation()
   }
 
-  return (
-    <AlertDialog.Root
-      onOpenChange={(isOpen) => {
-        if (!isOpen) {
-          onClose?.()
-        }
-      }}
-      open={open}
+  function handleBackdropClick() {
+    onClose?.()
+  }
+
+  /**
+   * Base UI forces `disablePointerDismissal` on an alert dialog and this
+   * component renders no trigger, so the primitive can only ever report a
+   * close. Guarding on the reported state would be a branch nothing can take.
+   */
+  function handleOpenChange() {
+    onClose?.()
+  }
+
+  const confirmAction = (
+    <Button
+      data-testid="confirm-action"
+      {...confirmProps}
+      disabled={confirmProps?.disabled || Boolean(blockedReason)}
+      loading={confirmLoading}
+      onClick={handleConfirm}
     >
-      <AlertDialog.Portal>
+      {confirmText ?? labels.confirm.confirm}
+    </Button>
+  )
+
+  return (
+    <AlertDialog.Root onOpenChange={handleOpenChange} open={open}>
+      <AlertDialog.Portal container={portalContainer}>
         <AlertDialog.Backdrop
           className={backdrop()}
           data-testid="confirm-backdrop"
-          onClick={handleOverlayClick}
+          onClick={handleBackdropClick}
         />
         <AlertDialog.Popup
           className={popup()}
@@ -99,6 +203,25 @@ function Confirm({
               {descriptionText}
             </AlertDialog.Description>
           </div>
+          {content && (
+            <div className={contentSlot()} data-testid="confirm-content">
+              {content}
+            </div>
+          )}
+          {challengeState.present && (
+            <form
+              className={challenge()}
+              data-testid="confirm-challenge"
+              onSubmit={handleSubmit}
+            >
+              {challengeState.node}
+            </form>
+          )}
+          {failure && (
+            <p className={error()} data-testid="confirm-error" role="alert">
+              {failure}
+            </p>
+          )}
           <div className={footer()} data-testid="confirm-footer">
             <AlertDialog.Close
               data-testid="confirm-cancel"
@@ -111,16 +234,21 @@ function Confirm({
                 />
               }
             >
-              {cancelText}
+              {cancelText ?? labels.confirm.cancel}
             </AlertDialog.Close>
-            <Button
-              data-testid="confirm-action"
-              {...confirmProps}
-              loading={confirmLoading}
-              onClick={handleConfirm}
-            >
-              {confirmText}
-            </Button>
+            {blockedReason ? (
+              <span
+                aria-describedby={hintId}
+                className={blocked()}
+                data-testid="confirm-blocked"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: a disabled button takes no focus, so this wrapper is the only place a reader can land to hear why it is blocked
+                tabIndex={0}
+              >
+                {confirmAction}
+              </span>
+            ) : (
+              confirmAction
+            )}
           </div>
         </AlertDialog.Popup>
       </AlertDialog.Portal>

@@ -13,14 +13,14 @@ import { Clock } from '@/internal/icons'
 import { cn } from '@/support/utils'
 
 import { DEFAULT_SECTION_WIDTH, inputShared } from '../input/input.shared'
+import type { TimeInputProps } from './time-input.types'
 import {
   clampTime,
   formatTime,
   parsePaste,
   parseTime,
   type TimeParts,
-} from './time-input.logic'
-import type { TimeInputProps } from './time-input.types'
+} from './time-input.utils'
 
 const HH_MAX = 23
 const MM_MAX = 59
@@ -198,26 +198,34 @@ function TimeInput({
   const hhRef = useRef<HTMLInputElement>(null)
   const mmRef = useRef<HTMLInputElement>(null)
   const ssRef = useRef<HTMLInputElement>(null)
-  // True when the next external `value` change should sync internal state.
-  // Reset to true after each internal change so that subsequent external
-  // updates (parent re-renders driven by something other than our onChange)
-  // still flow in.
-  const acceptExternalChange = useRef(true)
   const containsFocus = useRef(false)
 
+  const shownTime = formatTime(
+    {
+      hh,
+      mm,
+      ss,
+    },
+    withSeconds,
+  )
+
+  // A controlled parent that refuses an edit re-renders with the value it
+  // still wants, which is often the value it already had. Comparing against
+  // what the segments currently show — instead of against the previous
+  // `value` — is what lets that refusal pull the field back.
   useEffect(() => {
     if (!isControlled) {
       return
     }
-    if (!acceptExternalChange.current) {
-      acceptExternalChange.current = true
+    const external = value ?? null
+    if (external === shownTime) {
       return
     }
-    const parts = parseTime(value ?? null, withSeconds)
+    const parts = parseTime(external, withSeconds)
     setHh(parts.hh)
     setMm(parts.mm)
     setSs(parts.ss)
-  }, [value, withSeconds, isControlled])
+  }, [isControlled, shownTime, value, withSeconds])
 
   function emit(parts: TimeParts) {
     const formatted = formatTime(parts, withSeconds)
@@ -226,7 +234,6 @@ function TimeInput({
 
   function makeHandler(field: 'hh' | 'mm' | 'ss') {
     return (val: number | null) => {
-      acceptExternalChange.current = false
       if (field === 'hh') {
         setHh(val)
       }
@@ -290,7 +297,6 @@ function TimeInput({
           setHh(reparsed.hh)
           setMm(reparsed.mm)
           setSs(reparsed.ss)
-          acceptExternalChange.current = false
           onChange?.(clamped)
         }
       }
@@ -311,7 +317,6 @@ function TimeInput({
     setHh(parts.hh)
     setMm(parts.mm)
     setSs(parts.ss)
-    acceptExternalChange.current = false
     const formatted = formatTime(parts, withSeconds)
     if (formatted) {
       const clamped =
@@ -354,7 +359,7 @@ function TimeInput({
   // ::selection is suppressed so it doesn't double up with the focus fill,
   // and the caret is hidden because each focus selects the whole segment.
   const segmentClass = cn(
-    'h-full w-[calc(2ch+0.3em)] min-w-0 border-0 px-[0.15em] py-0 text-center',
+    'time-input-segment h-full w-[calc(2ch+0.3em)] min-w-0 border-0 px-[0.15em] py-0 text-center',
     'bg-transparent caret-transparent tabular-nums outline-none',
     'selection:bg-transparent',
     'placeholder:text-muted-foreground placeholder:opacity-100',
@@ -363,7 +368,7 @@ function TimeInput({
     'disabled:cursor-not-allowed disabled:opacity-50',
   )
 
-  const colonClass = 'select-none text-muted-foreground'
+  const colonClass = 'time-input-colon select-none text-muted-foreground'
 
   return (
     <div

@@ -1,24 +1,34 @@
-import type { PropsWithChildren } from 'react'
+import {
+  cloneElement,
+  isValidElement,
+  type PropsWithChildren,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
 import { tv } from 'tailwind-variants'
 import { Loader2 } from '@/internal/icons'
+
+import { cn } from '@/support/utils'
 
 import type { BadgeProps } from './badge.types'
 
 const badge = tv({
   defaultVariants: {
     align: 'center',
+    size: 'md',
     variant: 'default',
   },
   slots: {
-    content: 'badge-content inline-flex items-center gap-1',
+    content: 'badge-content inline-flex items-center',
     root: [
-      'badge-root relative inline-flex h-5 w-fit shrink-0 items-center justify-center',
-      'gap-1 overflow-hidden rounded-full border border-transparent',
-      'whitespace-nowrap px-2 py-0.5 font-medium text-xs transition-all',
-      '[&>svg]:pointer-events-none [&>svg]:size-3',
+      'badge-root relative inline-flex w-fit shrink-0 items-center justify-center',
+      'overflow-hidden rounded-full border border-transparent',
+      'whitespace-nowrap font-medium transition-all',
+      '[&>svg]:pointer-events-none',
     ],
-    spinner: 'size-3 animate-spin',
-    spinnerWrap: 'absolute inset-0 flex items-center justify-center',
+    spinner: 'badge-spinner animate-spin',
+    spinnerWrap:
+      'badge-spinner-wrap absolute inset-0 flex items-center justify-center',
   },
   variants: {
     align: {
@@ -39,12 +49,33 @@ const badge = tv({
     },
     clickable: {
       true: {
-        root: 'cursor-pointer',
+        root: [
+          'cursor-pointer outline-none',
+          'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
+          'disabled:cursor-not-allowed',
+        ],
       },
     },
     loading: {
       true: {
         content: 'invisible',
+      },
+    },
+    size: {
+      lg: {
+        content: 'gap-1.5',
+        root: 'h-6 gap-1.5 px-2.5 py-0.5 text-sm [&>svg]:size-3.5',
+        spinner: 'size-3.5',
+      },
+      md: {
+        content: 'gap-1',
+        root: 'h-5 gap-1 px-2 py-0.5 text-xs [&>svg]:size-3',
+        spinner: 'size-3',
+      },
+      sm: {
+        content: 'gap-0.5',
+        root: 'h-4 gap-0.5 px-1.5 text-[0.625rem] [&>svg]:size-2.5',
+        spinner: 'size-2.5',
       },
     },
     variant: {
@@ -103,26 +134,80 @@ function Badge({
   align,
   block,
   loading,
+  size = 'md',
+  asChild,
   onClick,
 }: PropsWithChildren<BadgeProps>) {
+  const child =
+    asChild && isValidElement(children)
+      ? (children as ReactElement<Record<string, unknown>>)
+      : undefined
+  const clickable = Boolean(onClick)
   const { root, content, spinner, spinnerWrap } = badge({
     align,
     block,
-    clickable: Boolean(onClick),
+    clickable,
     loading,
+    size,
     variant,
   })
 
-  return (
-    <span className={root()} data-testid="badge" onClick={onClick}>
+  const inner = (
+    <>
       <span className={content()} data-testid="badge-content">
-        {children}
+        {child ? (child.props.children as ReactNode) : children}
       </span>
       {loading && (
         <span className={spinnerWrap()}>
           <Loader2 className={spinner()} />
         </span>
       )}
+    </>
+  )
+
+  if (child) {
+    return cloneElement(
+      child,
+      {
+        'aria-busy': loading,
+        'aria-disabled': loading || undefined,
+        className: cn(root(), child.props.className as string | undefined),
+        'data-size': size,
+        'data-testid': 'badge',
+        ...(clickable
+          ? {
+              onClick: loading ? undefined : onClick,
+            }
+          : {}),
+      },
+      inner,
+    )
+  }
+
+  if (clickable) {
+    return (
+      <button
+        aria-busy={loading}
+        className={root()}
+        data-size={size}
+        data-testid="badge"
+        disabled={loading}
+        onClick={onClick}
+        type="button"
+      >
+        {inner}
+      </button>
+    )
+  }
+
+  return (
+    <span
+      aria-busy={loading}
+      className={root()}
+      data-size={size}
+      data-testid="badge"
+    >
+      {inner}
     </span>
   )
 }

@@ -20,8 +20,7 @@ pnpm add @turystack/react-hooks @turystack/react-icons react react-dom tailwindc
 
 ```ts
 import { /* … */ } from '@turystack/react-web'
-import { /* … */ } from '@turystack/react-web/hooks'
-import { /* … */ } from '@turystack/react-web/styles.css'
+import '@turystack/react-web/styles.css'
 ```
 
 ## Documentation

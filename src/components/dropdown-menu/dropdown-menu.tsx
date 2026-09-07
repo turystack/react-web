@@ -1,7 +1,14 @@
 import { Menu } from '@base-ui/react/menu'
 import { isValidElement, type PropsWithChildren } from 'react'
 import { tv } from 'tailwind-variants'
+import { usePortalContainer } from '@/components/portal-provider'
 import { CheckIcon } from '@/internal/icons'
+import {
+  DropdownMenuGroupContext,
+  DropdownMenuRadioContext,
+  useDropdownMenuRadioGroup,
+  useInDropdownMenuGroup,
+} from './dropdown-menu.context.js'
 
 import type {
   DropdownMenuCheckboxItemProps,
@@ -11,9 +18,6 @@ import type {
   DropdownMenuProps,
   DropdownMenuRadioGroupProps,
   DropdownMenuRadioItemProps,
-  // DropdownMenuSubContentProps,
-  // DropdownMenuSubProps,
-  // DropdownMenuSubTriggerProps,
   DropdownMenuTriggerProps,
 } from './dropdown-menu.types'
 
@@ -23,30 +27,25 @@ const styles = tv({
   },
   slots: {
     checkboxItem:
-      'relative flex cursor-pointer select-none items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg:not([class*="size-"])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0',
+      'dropdown-menu-checkbox-item relative flex cursor-pointer select-none items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg:not([class*="size-"])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0',
     indicator:
-      'pointer-events-none absolute right-2 flex items-center justify-center',
-    item: 'group/dropdown-menu-item relative flex min-h-9 cursor-pointer select-none items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-hidden data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg:not([class*="size-"])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0',
-    label: 'px-2.5 py-1.5 font-medium text-muted-foreground text-xs',
+      'dropdown-menu-indicator pointer-events-none absolute right-2 flex items-center justify-center',
+    item: 'dropdown-menu-item group/dropdown-menu-item relative flex min-h-9 cursor-pointer select-none items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-hidden data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg:not([class*="size-"])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0',
+    label:
+      'dropdown-menu-label px-2.5 py-1.5 font-medium text-muted-foreground text-xs',
     popup:
-      'data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:fade-in-0 data-open:zoom-in-95 data-closed:fade-out-0 data-closed:zoom-out-95 z-50 max-h-(--available-height) w-(--anchor-width) min-w-40 origin-(--transform-origin) overflow-y-auto overflow-x-hidden rounded-lg bg-popover p-1.5 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10 duration-100 data-closed:animate-out data-open:animate-in data-closed:overflow-hidden',
-    positioner: 'isolate z-50 outline-none',
+      'dropdown-menu-popup data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:fade-in-0 data-open:zoom-in-95 data-closed:fade-out-0 data-closed:zoom-out-95 z-50 max-h-(--available-height) w-(--anchor-width) min-w-40 origin-(--transform-origin) overflow-y-auto overflow-x-hidden rounded-lg bg-popover p-1.5 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10 duration-100 data-closed:animate-out data-open:animate-in data-closed:overflow-hidden',
+    positioner: 'dropdown-menu-positioner isolate z-50 outline-none',
     radioItem:
-      'relative flex cursor-pointer select-none items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg:not([class*="size-"])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0',
-    separator: '-mx-1.5 my-1.5 h-px bg-border',
+      'dropdown-menu-radio-item relative flex cursor-pointer select-none items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg:not([class*="size-"])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0',
+    separator: 'dropdown-menu-separator -mx-1.5 my-1.5 h-px bg-border',
     shortcut:
-      'ml-auto text-muted-foreground text-xs tracking-widest group-focus/dropdown-menu-item:text-accent-foreground',
-    subPopup:
-      'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:fade-in-0 data-open:zoom-in-95 data-closed:fade-out-0 data-closed:zoom-out-95 z-50 max-h-(--available-height) w-auto min-w-24 origin-(--transform-origin) overflow-y-auto overflow-x-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10 duration-100 data-closed:animate-out data-open:animate-in',
-    subTrigger:
-      'flex cursor-pointer select-none items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground data-popup-open:bg-accent data-popup-open:text-accent-foreground [&_svg:not([class*="size-"])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0',
-    subTriggerIcon: 'ml-auto size-4',
+      'dropdown-menu-shortcut ml-auto text-muted-foreground text-xs tracking-widest group-focus/dropdown-menu-item:text-accent-foreground',
   },
   variants: {
     inset: {
       true: {
         label: 'pl-7',
-        subTrigger: 'pl-7',
       },
     },
     variant: {
@@ -89,9 +88,10 @@ function DropdownMenuContent({
   sideOffset = 4,
   width,
 }: PropsWithChildren<DropdownMenuContentProps>) {
+  const portalContainer = usePortalContainer()
   const s = styles()
   return (
-    <Menu.Portal>
+    <Menu.Portal container={portalContainer}>
       <Menu.Positioner
         align={align}
         className={s.positioner()}
@@ -113,6 +113,14 @@ function DropdownMenuContent({
       </Menu.Positioner>
     </Menu.Portal>
   )
+}
+
+const GROUPED = {
+  inGroup: true,
+}
+
+const IN_RADIO_GROUP = {
+  inRadioGroup: true,
 }
 
 function DropdownMenuItem({
@@ -174,9 +182,11 @@ function DropdownMenuRadioGroup({
   value,
 }: PropsWithChildren<DropdownMenuRadioGroupProps>) {
   return (
-    <Menu.RadioGroup onValueChange={onValueChange} value={value}>
-      {children}
-    </Menu.RadioGroup>
+    <DropdownMenuRadioContext.Provider value={IN_RADIO_GROUP}>
+      <Menu.RadioGroup onValueChange={onValueChange} value={value}>
+        {children}
+      </Menu.RadioGroup>
+    </DropdownMenuRadioContext.Provider>
   )
 }
 
@@ -185,6 +195,7 @@ function DropdownMenuRadioItem({
   disabled,
   value,
 }: PropsWithChildren<DropdownMenuRadioItemProps>) {
+  useDropdownMenuRadioGroup()
   const s = styles()
   return (
     <Menu.RadioItem className={s.radioItem()} disabled={disabled} value={value}>
@@ -205,6 +216,16 @@ function DropdownMenuLabel({
   const s = styles({
     inset,
   })
+  const inGroup = useInDropdownMenuGroup()
+
+  // `Menu.GroupLabel` labels a group, so outside one it has nothing to name —
+  // the headless layer is right to refuse it. A label on its own is still a
+  // reasonable thing to put in a menu, and deciding which element that is
+  // belongs to the primitive, not to whoever composes it.
+  if (!inGroup) {
+    return <div className={s.label()}>{children}</div>
+  }
+
   return <Menu.GroupLabel className={s.label()}>{children}</Menu.GroupLabel>
 }
 
@@ -219,49 +240,12 @@ function DropdownMenuShortcut({ children }: PropsWithChildren) {
 }
 
 function DropdownMenuGroup({ children }: PropsWithChildren) {
-  return <Menu.Group>{children}</Menu.Group>
+  return (
+    <DropdownMenuGroupContext.Provider value={GROUPED}>
+      <Menu.Group>{children}</Menu.Group>
+    </DropdownMenuGroupContext.Provider>
+  )
 }
-
-// function _DropdownMenuSub({
-//   children,
-// }: PropsWithChildren<DropdownMenuSubProps>) {
-//   return <Menu.SubmenuRoot>{children}</Menu.SubmenuRoot>
-// }
-
-// function _DropdownMenuSubTrigger({
-//   children,
-//   inset,
-// }: PropsWithChildren<DropdownMenuSubTriggerProps>) {
-//   const s = styles({
-//     inset,
-//   })
-//   return (
-//     <Menu.SubmenuTrigger className={s.subTrigger()}>
-//       {children}
-//       <ChevronRightIcon className={s.subTriggerIcon()} />
-//     </Menu.SubmenuTrigger>
-//   )
-// }
-
-// function _DropdownMenuSubContent({
-//   children,
-// }: PropsWithChildren<DropdownMenuSubContentProps>) {
-//   const s = styles()
-//   return (
-//     <Menu.Portal>
-//       <Menu.Positioner
-//         align="start"
-//         alignOffset={-3}
-//         className={s.positioner()}
-//         side="right"
-//         sideOffset={0}
-//       >
-//         <Menu.Popup className={s.subPopup()}>{children}</Menu.Popup>
-//       </Menu.Positioner>
-//     </Menu.Portal>
-//   )
-// }
-
 const DropdownMenu = Object.assign(DropdownMenuRoot, {
   CheckboxItem: DropdownMenuCheckboxItem,
   Content: DropdownMenuContent,

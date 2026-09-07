@@ -34,43 +34,48 @@ const styles = tv({
   slots: {
     // Field wrapper — groups label + input + description + error
     field: [
-      'group/field flex w-full flex-col gap-2',
+      'form-field group/field flex w-full flex-col gap-2',
       '*:w-full [&>.sr-only]:w-auto',
     ],
 
     // Helper text below the input
     fieldDescription: [
-      'text-left font-normal text-muted-foreground text-sm leading-normal',
+      'form-field-description text-left font-normal text-muted-foreground text-sm leading-normal',
       '[&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4',
     ],
 
     // Error message
-    fieldError: 'font-normal text-destructive text-sm',
+    fieldError: 'form-field-error font-normal text-destructive text-sm',
 
     // Stacked row of fields (e.g. first name + last name)
-    fieldGroup: '@container/field-group flex w-full flex-col gap-5',
+    fieldGroup:
+      'form-field-group @container/field-group flex w-full flex-col gap-5',
 
     // Fieldset legend
-    fieldLegend: 'mb-1.5 flex items-center gap-1.5 font-medium',
+    fieldLegend:
+      'form-field-legend mb-1.5 flex items-center gap-1.5 font-medium',
 
     // Separator wrapper
-    fieldSeparator: 'relative my-2 h-5 text-sm',
+    fieldSeparator: 'form-field-separator relative my-2 h-5 text-sm',
 
     // Separator inline text label
     fieldSeparatorContent: [
-      'relative mx-auto block w-fit',
+      'form-field-separator-content relative mx-auto block w-fit',
       'px-2',
       'text-center text-muted-foreground text-sm',
     ],
 
     // Separator line
-    fieldSeparatorLine: ['absolute inset-x-0 top-1/2', 'h-px bg-border'],
+    fieldSeparatorLine: [
+      'form-field-separator-line absolute inset-x-0 top-1/2',
+      'h-px bg-border',
+    ],
 
     // Fieldset — groups related sections with legend
-    fieldSet: 'flex flex-col gap-4',
+    fieldSet: 'form-field-set flex flex-col gap-4',
 
     floatingLabel: [
-      'pointer-events-none absolute top-1/2 left-2.5 z-10 origin-left',
+      'form-floating-label pointer-events-none absolute top-1/2 left-2.5 z-10 origin-left',
       '-translate-y-1/2 px-1 font-normal text-muted-foreground text-sm',
       'transition-all duration-150',
       'group-focus-within/field:top-0 group-focus-within/field:bg-background',
@@ -78,7 +83,7 @@ const styles = tv({
       'group-data-[filled]/field:top-0 group-data-[filled]/field:bg-background',
       'group-data-[filled]/field:text-xs',
     ],
-    root: '',
+    root: 'form',
   },
 
   variants: {
@@ -132,11 +137,20 @@ const styles = tv({
 
 function FormRoot({
   children,
+  className,
   onSubmit,
   ...props
 }: PropsWithChildren<FormProps> & React.ComponentProps<'form'>) {
+  const { root } = styles()
+
   return (
-    <form onSubmit={onSubmit} {...props}>
+    <form
+      className={root({
+        className,
+      })}
+      onSubmit={onSubmit}
+      {...props}
+    >
       {children}
     </form>
   )
@@ -253,7 +267,10 @@ function FormFieldSet({
           {legend}
           {tooltipProps && (
             <Tooltip {...tooltipProps}>
-              <Info className="text-muted-foreground" size={14} />
+              <Info
+                className="form-field-legend-tooltip-icon text-muted-foreground"
+                size={14}
+              />
             </Tooltip>
           )}
         </legend>

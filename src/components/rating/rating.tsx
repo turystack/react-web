@@ -1,5 +1,5 @@
 import { tv } from 'tailwind-variants'
-import { Star } from '@/internal/icons'
+import { Star, StarFilled } from '@/internal/icons'
 
 import type { RatingProps } from './rating.types'
 
@@ -17,10 +17,10 @@ const styles = tv({
   variants: {
     filled: {
       false: {
-        star: 'fill-transparent text-muted-foreground',
+        star: 'text-muted-foreground',
       },
       true: {
-        star: 'fill-primary',
+        star: 'text-primary',
       },
     },
   },
@@ -43,23 +43,31 @@ function Rating({
 
   return (
     <div className={root()} data-testid="rating-root">
-      {stars.map((position) => (
-        <button
-          aria-label={`${position}`}
-          className={button()}
-          disabled={readOnly || !onChange}
-          key={position}
-          onClick={() => onChange?.(position)}
-          type="button"
-        >
-          <Star
-            className={star({
-              filled: position <= value,
-            })}
-            size={size}
-          />
-        </button>
-      ))}
+      {stars.map((position) => {
+        const filled = position <= value
+        // Solar's outline star is a stroke traced around the shape, so no fill
+        // utility can colour its inside — a filled star has to be its own glyph.
+        const Glyph = filled ? StarFilled : Star
+
+        return (
+          <button
+            aria-label={`${position}`}
+            aria-pressed={filled}
+            className={button()}
+            disabled={readOnly || !onChange}
+            key={position}
+            onClick={() => onChange?.(position)}
+            type="button"
+          >
+            <Glyph
+              className={star({
+                filled,
+              })}
+              size={size}
+            />
+          </button>
+        )
+      })}
     </div>
   )
 }

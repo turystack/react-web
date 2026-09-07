@@ -65,7 +65,7 @@ function Slot({
       {char}
       {hasFakeCaret && (
         <div
-          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+          className="otp-input-caret-wrapper pointer-events-none absolute inset-0 flex items-center justify-center"
           data-testid="otp-input-caret"
         >
           <div className={caretClass} />

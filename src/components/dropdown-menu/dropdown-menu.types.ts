@@ -24,14 +24,10 @@
  *       <DropdownMenu.Item onClick={handleEdit}>Edit<DropdownMenu.Shortcut>⌘E</DropdownMenu.Shortcut></DropdownMenu.Item>
  *       <DropdownMenu.Separator />
  *       <DropdownMenu.Item variant="destructive" onClick={handleDelete}>Delete</DropdownMenu.Item>
- *       <DropdownMenu.Sub>
- *         <DropdownMenu.SubTrigger>More</DropdownMenu.SubTrigger>
- *         <DropdownMenu.SubContent>...</DropdownMenu.SubContent>
- *       </DropdownMenu.Sub>
  *     </DropdownMenu.Content>
  *   </DropdownMenu>
  *
- * Dependencies: @radix-ui/react-dropdown-menu, @turystack/react-icons (Check, Circle, ChevronRight)
+ * Dependencies: @base-ui/react/menu, @turystack/react-icons (Check, Circle, ChevronRight)
  */
 
 export type DropdownMenuSide = 'top' | 'right' | 'bottom' | 'left'
@@ -86,11 +82,3 @@ export type DropdownMenuSeparatorProps = {}
 export type DropdownMenuShortcutProps = {}
 
 export type DropdownMenuGroupProps = {}
-
-export type DropdownMenuSubProps = {}
-
-export type DropdownMenuSubTriggerProps = {
-  inset?: boolean // adds left padding for alignment
-}
-
-export type DropdownMenuSubContentProps = {}

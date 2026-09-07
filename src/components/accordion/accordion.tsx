@@ -1,5 +1,10 @@
 import { Accordion as AccordionPrimitive } from '@base-ui/react/accordion'
-import { createContext, type PropsWithChildren, useContext } from 'react'
+import {
+  createContext,
+  type PropsWithChildren,
+  useContext,
+  useState,
+} from 'react'
 import { tv } from 'tailwind-variants'
 import { ChevronDown, ChevronUp } from '@/internal/icons'
 
@@ -31,9 +36,9 @@ const accordion = tv({
     trigger:
       'accordion-trigger group/accordion-trigger relative flex flex-1 cursor-pointer items-start justify-between rounded-lg border border-transparent py-2.5 text-left font-medium text-sm outline-none transition-all hover:underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
     triggerIconDown:
-      'accordion-trigger-icon pointer-events-none ml-auto size-4 shrink-0 text-muted-foreground group-aria-expanded/accordion-trigger:hidden',
+      'accordion-trigger-icon-down accordion-trigger-icon pointer-events-none ml-auto size-4 shrink-0 text-muted-foreground group-aria-expanded/accordion-trigger:hidden',
     triggerIconUp:
-      'accordion-trigger-icon pointer-events-none ml-auto hidden size-4 shrink-0 text-muted-foreground group-aria-expanded/accordion-trigger:inline',
+      'accordion-trigger-icon-up accordion-trigger-icon pointer-events-none ml-auto hidden size-4 shrink-0 text-muted-foreground group-aria-expanded/accordion-trigger:inline',
   },
   variants: {
     bordered: {
@@ -59,40 +64,59 @@ function AccordionRoot({
   })
 
   const multiple = type === 'multiple'
+  const collapsible =
+    type === 'single'
+      ? ((
+          props as {
+            collapsible?: boolean
+          }
+        ).collapsible ?? true)
+      : true
 
+  const toList = (raw: string | string[] | undefined) => {
+    if (raw === undefined) {
+      return undefined
+    }
+    if (type === 'multiple') {
+      return raw as string[]
+    }
+    return raw ? [raw as string] : []
+  }
+
+  const controlledValue = toList(props.value)
+  const [ownValue, setOwnValue] = useState<string[]>(
+    () => toList(props.defaultValue) ?? [],
+  )
+  const isControlled = controlledValue !== undefined
+  const value = isControlled ? controlledValue : ownValue
+
+  // The headless accordion has no `collapsible` of its own, so refusing the
+  // close means owning the value and dropping the empty change on the floor.
   const handleValueChange = (newValue: unknown[]) => {
+    const next = newValue as string[]
+
+    if (!collapsible && next.length === 0) {
+      return
+    }
+
+    if (!isControlled) {
+      setOwnValue(next)
+    }
+
     if (type === 'single') {
       ;(
         props as {
-          onChange?: (v: string) => void
+          onChange?: (v: string | null) => void
         }
-      ).onChange?.((newValue as string[])[0])
+      ).onChange?.(next[0] ?? null)
     } else {
       ;(
         props as {
           onChange?: (v: string[]) => void
         }
-      ).onChange?.(newValue as string[])
+      ).onChange?.(next)
     }
   }
-
-  const value =
-    type === 'single'
-      ? props.value !== undefined
-        ? props.value
-          ? [props.value]
-          : []
-        : undefined
-      : props.value
-
-  const defaultValue =
-    type === 'single'
-      ? props.defaultValue !== undefined
-        ? props.defaultValue
-          ? [props.defaultValue]
-          : []
-        : undefined
-      : props.defaultValue
 
   return (
     <AccordionContext.Provider
@@ -103,10 +127,9 @@ function AccordionRoot({
       <AccordionPrimitive.Root
         className={root()}
         data-testid="accordion-root"
-        defaultValue={defaultValue as string[]}
         multiple={multiple}
         onValueChange={handleValueChange}
-        value={value as string[]}
+        value={value}
       >
         {children}
       </AccordionPrimitive.Root>
