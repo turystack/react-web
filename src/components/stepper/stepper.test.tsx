@@ -9,6 +9,7 @@ import type {
   StepFragmentProps,
   StepperConnector,
   StepperOrientation,
+  StepperProps,
 } from './stepper.types'
 
 function ThreeSteps({
@@ -183,11 +184,82 @@ describe('Stepper indicator navigation', () => {
     const future = screen.getByRole('button', {
       name: '3Review',
     })
-    expect(future).toBeDisabled()
     expect(future).toHaveAttribute('aria-disabled', 'true')
 
-    await userEvent.click(future)
+    await userEvent.click(future, {
+      pointerEventsCheck: 0,
+    })
     expect(onActiveChange).not.toHaveBeenCalled()
+  })
+
+  it('says why a step ahead is blocked, and keeps it reachable', async () => {
+    const onActiveChange = vi.fn()
+    render(<ThreeSteps active={0} onActiveChange={onActiveChange} />)
+
+    const future = screen.getByRole('button', {
+      name: '3Review',
+    })
+    expect(future).not.toHaveAttribute('disabled')
+    expect(future).toHaveAccessibleDescription('Finish the current step first')
+
+    future.focus()
+    expect(future).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard(' ')
+    expect(onActiveChange).not.toHaveBeenCalled()
+    expect(
+      await screen.findByTestId('disabled-reason-popup'),
+    ).toHaveTextContent('Finish the current step first')
+  })
+
+  it("prefers the step's own disabledReason, and it blocks a reachable step", async () => {
+    const onActiveChange = vi.fn()
+    render(
+      <Stepper active={1} onActiveChange={onActiveChange}>
+        <Stepper.Step disabledReason="The account is locked" label="Account" />
+        <Stepper.Step label="Address" />
+        <Stepper.Step disabledReason="Add an address first" label="Review" />
+      </Stepper>,
+    )
+
+    const past = screen.getByRole('button', {
+      name: 'Account',
+    })
+    expect(past).toHaveAttribute('aria-disabled', 'true')
+    expect(past).toHaveAccessibleDescription('The account is locked')
+    await userEvent.click(past, {
+      pointerEventsCheck: 0,
+    })
+    expect(onActiveChange).not.toHaveBeenCalled()
+
+    expect(
+      screen.getByRole('button', {
+        name: '3Review',
+      }),
+    ).toHaveAccessibleDescription('Add an address first')
+  })
+
+  it('adds no reason to a reachable step, nor to one closed explicitly', () => {
+    render(
+      <Stepper active={1}>
+        <Stepper.Step allowStepClick={false} label="Account" />
+        <Stepper.Step label="Address" />
+        <Stepper.Step allowStepClick={false} label="Review" />
+      </Stepper>,
+    )
+
+    for (const name of ['Account', '2Address', '3Review']) {
+      expect(
+        screen.getByRole('button', {
+          name,
+        }),
+      ).not.toHaveAttribute('aria-describedby')
+    }
+    expect(
+      screen.getByRole('button', {
+        name: '3Review',
+      }),
+    ).toBeDisabled()
   })
 
   it('opens every indicator when allowNextStepsSelect is set', async () => {
@@ -1060,6 +1132,24 @@ describe('Stepper keepMounted', () => {
     expect(screen.getByText('Address panel')).not.toBeVisible()
   })
 
+  it('makes only the inactive panels inert', () => {
+    render(
+      <Stepper active={0} keepMounted>
+        <Stepper.Step label="Account">
+          <p>Account panel</p>
+        </Stepper.Step>
+        <Stepper.Step label="Address">
+          <p>Address panel</p>
+        </Stepper.Step>
+      </Stepper>,
+    )
+
+    const active = screen.getByText('Account panel').closest('section')
+    const inactive = screen.getByText('Address panel').closest('section')
+    expect(active).not.toHaveAttribute('inert')
+    expect(inactive).toHaveAttribute('inert')
+  })
+
   it('still gives the completed slot the whole panel area', () => {
     render(
       <Stepper active={2} keepMounted>
@@ -1223,7 +1313,7 @@ describe.each(['none', 'sm', 'md', 'lg', 'xl', 'full'] as const)(
   },
 )
 
-describe.each(['numbered', 'dotted', 'icon'] as const)(
+describe.each(['numbered', 'dotted', 'icon', 'path'] as const)(
   'Stepper variant %s',
   (variant) => {
     it('keeps every step reachable', () => {
@@ -1514,6 +1604,164 @@ describe('Stepper variant dotted', () => {
   })
 })
 
+describe('Stepper variant path', () => {
+  function renderPath(props: Partial<StepperProps> = {}) {
+    return render(
+      <Stepper active={1} onActiveChange={vi.fn()} variant="path" {...props}>
+        <Stepper.Step label="Prospecting" />
+        <Stepper.Step description="Needs a budget" label="Qualification" />
+        <Stepper.Step label="Negotiation and review with legal" />
+        <Stepper.Step label="Closed" />
+      </Stepper>,
+    )
+  }
+
+  function stage(name: string | RegExp) {
+    return screen.getByRole('button', {
+      name,
+    })
+  }
+
+  it('is one row of stages that never wraps, stacks or draws a connector', () => {
+    renderPath({
+      connector: 'line',
+      orientation: 'vertical',
+      wrap: true,
+    })
+
+    const root = screen.getByTestId('stepper-root')
+
+    expect(root).toHaveAttribute('data-variant', 'path')
+    expect(root).toHaveAttribute('data-orientation', 'horizontal')
+    expect(screen.getByRole('list')).not.toHaveClass('flex-wrap')
+    expect(screen.getByRole('list')).not.toHaveClass('flex-col')
+    expect(screen.queryAllByTestId('stepper-connector')).toHaveLength(0)
+    expect(screen.getAllByRole('listitem')).toHaveLength(4)
+  })
+
+  it('draws a chevron behind every stage, carrying its state', () => {
+    const { container } = renderPath()
+
+    const shapes = Array.from(
+      container.querySelectorAll('[data-slot="stepper-shape"]'),
+    )
+
+    expect(shapes.map((shape) => shape.getAttribute('data-state'))).toEqual([
+      'stepCompleted',
+      'stepProgress',
+      'stepInactive',
+      'stepInactive',
+    ])
+    expect(shapes[0]).toHaveAttribute('aria-hidden')
+  })
+
+  it('checks the completed stages and marks the current one', () => {
+    renderPath()
+
+    const [completed, current, next] = screen.getAllByRole('listitem')
+
+    expect(
+      (completed as HTMLElement).querySelector(
+        '[data-slot="stepper-indicator"]',
+      ),
+    ).not.toBeNull()
+    expect(
+      (current as HTMLElement).querySelector('[data-slot="stepper-indicator"]'),
+    ).toBeNull()
+    expect(
+      (next as HTMLElement).querySelector('[data-slot="stepper-indicator"]'),
+    ).toBeNull()
+    expect(current).toHaveAttribute('aria-current', 'step')
+    // No step number anywhere: a path stage is its label.
+    expect(stage('Prospecting')).toBeInTheDocument()
+    expect(stage(/^Qualification.*Needs a budget$/)).toBeInTheDocument()
+  })
+
+  it('truncates a long label to one line and keeps the full text as its title', () => {
+    renderPath()
+
+    const long = stage('Negotiation and review with legal')
+
+    expect(long).toHaveAttribute('title', 'Negotiation and review with legal')
+    expect(long.querySelector('[data-slot="stepper-label"]')).toHaveClass(
+      'truncate',
+    )
+  })
+
+  it('gives a node label no title', () => {
+    render(
+      <Stepper active={0} variant="path">
+        <Stepper.Step label={<strong>Lead</strong>} />
+      </Stepper>,
+    )
+
+    expect(stage('Lead')).not.toHaveAttribute('title')
+  })
+
+  it('keeps the description for assistive technology only', () => {
+    renderPath()
+
+    expect(
+      stage(/^Qualification.*Needs a budget$/).querySelector(
+        '[data-slot="stepper-description"]',
+      ),
+    ).toHaveClass('sr-only')
+  })
+
+  it('asks for a completed stage on click and blocks the ones ahead, undimmed', async () => {
+    const onActiveChange = vi.fn()
+    const user = userEvent.setup()
+
+    renderPath({
+      onActiveChange,
+    })
+
+    await user.click(stage('Prospecting'))
+    expect(onActiveChange).toHaveBeenLastCalledWith(0)
+
+    expect(stage('Closed')).toHaveAttribute('aria-disabled', 'true')
+    expect(stage('Closed')).toHaveClass('disabled:opacity-100')
+    expect(stage('Closed')).not.toHaveClass('disabled:opacity-50')
+  })
+
+  it('lets any stage be picked with allowNextStepsSelect', async () => {
+    const onActiveChange = vi.fn()
+    const user = userEvent.setup()
+
+    renderPath({
+      allowNextStepsSelect: true,
+      onActiveChange,
+    })
+
+    await user.click(stage('Closed'))
+
+    expect(onActiveChange).toHaveBeenCalledWith(3)
+  })
+
+  it('sizes the stage height from size', () => {
+    renderPath({
+      size: 'lg',
+    })
+
+    expect(stage('Closed')).toHaveClass('h-12')
+  })
+
+  it('keeps the other variants free of chevrons and titles', () => {
+    render(
+      <Stepper active={0}>
+        <Stepper.Step label="Account" />
+      </Stepper>,
+    )
+
+    expect(stage('1Account')).not.toHaveAttribute('title')
+    expect(
+      screen
+        .getByTestId('stepper-root')
+        .querySelector('[data-slot="stepper-shape"]'),
+    ).toBeNull()
+  })
+})
+
 describe('Stepper button sections', () => {
   it('keeps the left section given to Previous', () => {
     render(
@@ -1764,5 +2012,159 @@ describe('Stepper connector', () => {
       'stepInactive',
       'stepInactive',
     ])
+  })
+})
+
+describe('Stepper panel area', () => {
+  it('renders no panel area for a path used as a status bar, with no step content', () => {
+    render(
+      <Stepper active={1} variant="path">
+        <Stepper.Step label="Draft" />
+        <Stepper.Step label="Review" />
+        <Stepper.Step label="Published" />
+      </Stepper>,
+    )
+
+    const root = screen.getByTestId('stepper-root')
+    expect(root.querySelector('[data-slot="stepper-panels"]')).toBeNull()
+    expect(root.querySelector('[data-slot="stepper-content"]')).toBeNull()
+    expect(screen.getByRole('list', { name: 'Stepper' })).toBeInTheDocument()
+  })
+
+  it('renders no panel area when only the active step has nothing to show', () => {
+    render(
+      <Stepper active={1}>
+        <Stepper.Step label="Account">
+          <p>Account panel</p>
+        </Stepper.Step>
+        <Stepper.Step label="Address">
+          {null}
+          {false}
+        </Stepper.Step>
+      </Stepper>,
+    )
+
+    const root = screen.getByTestId('stepper-root')
+    expect(root.querySelector('[data-slot="stepper-panels"]')).toBeNull()
+    expect(screen.queryByText('Account panel')).not.toBeInTheDocument()
+  })
+
+  it('renders the active panel when the active step has content', () => {
+    render(
+      <Stepper active={0}>
+        <Stepper.Step label="Account">
+          <p>Account panel</p>
+        </Stepper.Step>
+        <Stepper.Step label="Address" />
+      </Stepper>,
+    )
+
+    const panels = screen
+      .getByTestId('stepper-root')
+      .querySelector('[data-slot="stepper-panels"]')
+    expect(panels).not.toBeNull()
+    expect(panels).toBeVisible()
+    expect(screen.getByText('Account panel')).toBeVisible()
+  })
+
+  it('renders no panel area for a completed slot with nothing in it', () => {
+    render(
+      <Stepper active={2}>
+        <Stepper.Step label="Account" />
+        <Stepper.Step label="Address" />
+        <Stepper.Completed />
+      </Stepper>,
+    )
+
+    const root = screen.getByTestId('stepper-root')
+    expect(root.querySelector('[data-slot="stepper-panels"]')).toBeNull()
+  })
+
+  it('renders the completed slot when it has content, even if no step does', () => {
+    render(
+      <Stepper active={2}>
+        <Stepper.Step label="Account" />
+        <Stepper.Step label="Address" />
+        <Stepper.Completed>
+          <p>All done</p>
+        </Stepper.Completed>
+      </Stepper>,
+    )
+
+    expect(screen.getByText('All done')).toBeVisible()
+  })
+
+  it('keeps mounted panels in the DOM but hides the area while the active step is empty', () => {
+    render(
+      <Stepper active={1} keepMounted>
+        <Stepper.Step label="Account">
+          <p>Account panel</p>
+        </Stepper.Step>
+        <Stepper.Step label="Address" />
+      </Stepper>,
+    )
+
+    const panels = screen
+      .getByTestId('stepper-root')
+      .querySelector('[data-slot="stepper-panels"]')
+    expect(panels).not.toBeNull()
+    expect(panels).not.toBeVisible()
+    expect(screen.getByText('Account panel')).toBeInTheDocument()
+  })
+
+  it('shows the kept-mounted area when the active step has content', () => {
+    render(
+      <Stepper active={0} keepMounted>
+        <Stepper.Step label="Account">
+          <p>Account panel</p>
+        </Stepper.Step>
+        <Stepper.Step label="Address" />
+      </Stepper>,
+    )
+
+    const panels = screen
+      .getByTestId('stepper-root')
+      .querySelector('[data-slot="stepper-panels"]')
+    expect(panels).toBeVisible()
+    expect(screen.getByText('Account panel')).toBeVisible()
+  })
+
+  it('renders no kept-mounted area when no step has content', () => {
+    render(
+      <Stepper active={0} keepMounted variant="path">
+        <Stepper.Step label="Draft" />
+        <Stepper.Step label="Review" />
+      </Stepper>,
+    )
+
+    const root = screen.getByTestId('stepper-root')
+    expect(root.querySelector('[data-slot="stepper-panels"]')).toBeNull()
+  })
+})
+
+describe('Stepper axes', () => {
+  it('publishes its default size and variant for a theme to select', () => {
+    render(<ThreeSteps active={0} />)
+
+    const root = screen.getByTestId('stepper-root')
+    expect(root).toHaveAttribute('data-size', 'md')
+    expect(root).toHaveAttribute('data-variant', 'numbered')
+  })
+
+  it('publishes the size and variant it was given', () => {
+    render(
+      <Stepper active={0} size="lg" variant="dotted">
+        <Stepper.Step label="Account">
+          <p>Account panel</p>
+        </Stepper.Step>
+        <Stepper.Step label="Review">
+          <p>Review panel</p>
+        </Stepper.Step>
+      </Stepper>,
+    )
+
+    const root = screen.getByTestId('stepper-root')
+    expect(root).toHaveAttribute('data-size', 'lg')
+    expect(root).toHaveAttribute('data-variant', 'dotted')
   })
 })

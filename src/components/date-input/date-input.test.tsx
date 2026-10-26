@@ -2,6 +2,8 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { LabelsProvider } from '@/components/labels-provider'
+
 import { DateInput } from './date-input'
 
 const JAN_15 = new Date(2026, 0, 15)
@@ -122,10 +124,17 @@ describe('DateInput host props', () => {
     expect(screen.getByRole('grid')).toHaveAccessibleName('September 2025')
   })
 
-  it('keeps the class it was handed', () => {
-    render(<DateInput className="max-w-40" value={null} />)
+  it('marks its field with its own slot class and no class from outside', () => {
+    render(
+      <DateInput
+        // @ts-expect-error — className is not part of the contract
+        className="max-w-40"
+        value={null}
+      />,
+    )
 
-    expect(screen.getByRole('textbox')).toHaveClass('max-w-40')
+    expect(screen.getByRole('textbox')).toHaveClass('date-input-root')
+    expect(screen.getByRole('textbox')).not.toHaveClass('max-w-40')
   })
 
   it('calls the click handler it was handed and still opens', async () => {
@@ -245,5 +254,198 @@ describe.each(['sm', 'md', 'lg'] as const)('DateInput size %s', (size) => {
     await userEvent.click(screen.getByRole('button', { name: JAN_20_LABEL }))
 
     expect(onChange).toHaveBeenCalledWith(JAN_20)
+  })
+})
+
+describe('DateInput accessible names', () => {
+  it('names the control that opens the calendar', () => {
+    render(<DateInput value={null} />)
+
+    expect(
+      screen.getByRole('button', { name: 'Open calendar' }),
+    ).toHaveAttribute('aria-haspopup', 'dialog')
+  })
+
+  it('names it with a value in the field too', () => {
+    render(<DateInput value={JAN_15} />)
+
+    expect(
+      screen.getByRole('button', { name: 'Open calendar' }),
+    ).toBeInTheDocument()
+  })
+
+  it('leaves no button without a name', () => {
+    render(<DateInput value={JAN_15} />)
+
+    for (const button of screen.getAllByRole('button')) {
+      expect(button).toHaveAccessibleName()
+    }
+  })
+
+  it('opens the calendar from the named control', async () => {
+    render(<DateInput value={JAN_15} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open calendar' }))
+
+    expect(
+      await screen.findByRole('button', { name: JAN_20_LABEL }),
+    ).toBeInTheDocument()
+  })
+
+  it('takes both names from the labels the app provides', () => {
+    render(
+      <LabelsProvider
+        labels={{
+          dateInput: { clear: 'Limpar data', open: 'Abrir calendário' },
+        }}
+      >
+        <DateInput value={JAN_15} />
+      </LabelsProvider>,
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Abrir calendário' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Limpar data' }),
+    ).toBeInTheDocument()
+  })
+})
+
+const INTERACTIVE =
+  'button, input, select, textarea, a[href], [role="button"], [tabindex]'
+
+describe('DateInput structure', () => {
+  it('nests no interactive element inside another', () => {
+    const { container } = render(<DateInput value={JAN_15} />)
+
+    const controls = [...container.querySelectorAll(INTERACTIVE)]
+    expect(controls.length).toBeGreaterThanOrEqual(3)
+    for (const control of controls) {
+      expect(control.parentElement?.closest(INTERACTIVE)).toBeNull()
+    }
+  })
+
+  it('has no role="button" wrapper around the field', () => {
+    render(<DateInput value={JAN_15} />)
+
+    expect(screen.getByRole('textbox').closest('[role="button"]')).toBeNull()
+  })
+
+  it('puts the calendar button and the clear button on either side of the field', () => {
+    render(<DateInput value={JAN_15} />)
+
+    const open = screen.getByRole('button', { name: 'Open calendar' })
+    const clear = screen.getByRole('button', { name: 'Clear date' })
+    const field = screen.getByRole('textbox')
+
+    expect(open.tagName).toBe('BUTTON')
+    expect(clear.tagName).toBe('BUTTON')
+    expect(open).toHaveAttribute('type', 'button')
+    expect(open.contains(field)).toBe(false)
+    expect(clear.contains(field)).toBe(false)
+    expect(open.contains(clear)).toBe(false)
+  })
+
+  it('disables the calendar button with the field', () => {
+    render(<DateInput disabled value={JAN_15} />)
+
+    expect(screen.getByRole('button', { name: 'Open calendar' })).toBeDisabled()
+  })
+
+  it('tells assistive technology whether the calendar is open', async () => {
+    render(<DateInput value={JAN_15} />)
+
+    const open = screen.getByRole('button', { name: 'Open calendar' })
+    expect(open).toHaveAttribute('aria-expanded', 'false')
+
+    await userEvent.click(open)
+
+    expect(open).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('rings the field while the calendar is on screen', async () => {
+    render(<DateInput value={JAN_15} />)
+
+    expect(screen.getByRole('textbox')).not.toHaveClass('ring-3')
+
+    await userEvent.click(screen.getByRole('textbox'))
+
+    expect(screen.getByRole('textbox')).toHaveClass('ring-3')
+  })
+})
+
+describe('DateInput keyboard', () => {
+  it('reaches the calendar button, the field and the clear button in order', async () => {
+    render(<DateInput value={JAN_15} />)
+
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'Open calendar' })).toHaveFocus()
+
+    await userEvent.tab()
+    expect(screen.getByRole('textbox')).toHaveFocus()
+
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'Clear date' })).toHaveFocus()
+  })
+
+  it('opens the calendar with Enter on the calendar button', async () => {
+    render(<DateInput value={JAN_15} />)
+
+    await userEvent.tab()
+    await userEvent.keyboard('{Enter}')
+
+    expect(
+      await screen.findByRole('button', { name: JAN_20_LABEL }),
+    ).toBeInTheDocument()
+  })
+
+  it('opens the calendar with Space on the calendar button', async () => {
+    render(<DateInput value={JAN_15} />)
+
+    await userEvent.tab()
+    await userEvent.keyboard(' ')
+
+    expect(
+      await screen.findByRole('button', { name: JAN_20_LABEL }),
+    ).toBeInTheDocument()
+  })
+
+  it('clears with Enter on the clear button without opening the calendar', async () => {
+    const onChange = vi.fn()
+    render(<DateInput onChange={onChange} value={JAN_15} />)
+
+    screen.getByRole('button', { name: 'Clear date' }).focus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(onChange).toHaveBeenCalledWith(null)
+    expect(
+      screen.queryByRole('button', { name: JAN_20_LABEL }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('skips the clear button while there is nothing to clear', async () => {
+    render(<DateInput value={null} />)
+
+    await userEvent.tab()
+    await userEvent.tab()
+    await userEvent.tab()
+
+    expect(screen.getByRole('button', { name: 'Clear date' })).not.toHaveFocus()
+  })
+})
+
+describe('DateInput form wiring', () => {
+  it('is named by a label pointing at its id', () => {
+    render(
+      <>
+        <label htmlFor="check-in">Check-in</label>
+        <DateInput id="check-in" value={null} />
+      </>,
+    )
+
+    expect(
+      screen.getByRole('textbox', { name: 'Check-in' }),
+    ).toBeInTheDocument()
   })
 })

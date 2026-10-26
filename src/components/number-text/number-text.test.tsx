@@ -67,7 +67,7 @@ describe('NumberText', () => {
 
     const [up, down, plain] = screen.getAllByTestId('number-text')
 
-    expect(up.className).toContain('text-green-600')
+    expect(up.className).toContain('text-success')
     expect(down.className).toContain('text-destructive')
     expect(plain.className).not.toContain('text-destructive')
   })
@@ -92,5 +92,36 @@ describe('NumberText', () => {
     render(<NumberText value={0} />)
 
     expect(screen.getByTestId('number-text')).toHaveTextContent('0')
+  })
+})
+
+describe('NumberText inline in a sentence', () => {
+  it('takes the size and colour of the text around it', () => {
+    render(
+      <NumberText inheritColor size="inherit" value={0.15} variant="percent" />,
+    )
+
+    const rendered = screen.getByTestId('number-text')
+    expect(rendered).toHaveTextContent('15%')
+    expect(rendered).toHaveClass('text-[length:inherit]')
+    expect(rendered).not.toHaveClass('text-base', 'text-foreground')
+  })
+})
+
+describe('NumberText axes', () => {
+  it('publishes its default variant for a theme to select', () => {
+    render(<NumberText value={12} />)
+
+    expect(
+      screen.getByTestId('number-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'decimal')
+  })
+
+  it('publishes the variant it was given', () => {
+    render(<NumberText value={0.5} variant="percent" />)
+
+    expect(
+      screen.getByTestId('number-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'percent')
   })
 })

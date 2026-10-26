@@ -9,6 +9,8 @@
  * - Optional shows "(optional)" text
  * - Tooltip renders an info icon that shows tooltip on hover
  * - htmlFor associates label with input for accessibility
+ * - id lets a non-labelable control (a radio/checkbox group) name itself
+ *   with aria-labelledby (Form.Field does this)
  * - Disabled applies muted styling
  *
  * Implementation:
@@ -22,11 +24,11 @@
 
 export type LabelProps = {
   htmlFor?: string // associates label with an input by id
+  id?: string // id of the <label>, the target of a group's aria-labelledby
   required?: boolean // shows required indicator (e.g. asterisk)
   optional?: boolean // shows optional indicator text
   disabled?: boolean // applies disabled styling
   tooltip?: React.ReactNode // tooltip content shown next to label
-  className?: string // extra classes merged onto the label root
 }
 
 export type WithLabelProps<T> = T & {

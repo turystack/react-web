@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createRef } from 'react'
+import { createRef, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Input } from './input'
+import { ComposedInput } from './input.composed'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -99,6 +100,52 @@ describe('Input', () => {
     expect(onChange).toHaveBeenCalledWith('ab')
   })
 
+  it('keeps every keystroke of a controlled debounced field', async () => {
+    vi.useFakeTimers({
+      shouldAdvanceTime: true,
+    })
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+    })
+    const onChange = vi.fn()
+    function Controlled() {
+      const [value, setValue] = useState<string | null>(null)
+      return (
+        <>
+          <Input
+            debounce
+            onChange={(next) => {
+              onChange(next)
+              setValue(next)
+            }}
+            value={value}
+          />
+          <button onClick={() => setValue(null)} type="button">
+            reset
+          </button>
+        </>
+      )
+    }
+    render(<Controlled />)
+    const field = screen.getByRole('textbox')
+
+    await user.type(field, 'ab')
+    expect(field).toHaveValue('ab')
+    await vi.advanceTimersByTimeAsync(300)
+    expect(onChange).toHaveBeenLastCalledWith('ab')
+
+    // Typing on while the parent echoes 'ab' back keeps the newer letters.
+    await user.type(field, 'c')
+    expect(field).toHaveValue('abc')
+    await vi.advanceTimersByTimeAsync(300)
+    expect(onChange).toHaveBeenLastCalledWith('abc')
+    expect(field).toHaveValue('abc')
+
+    // A change the parent makes on its own still reaches the field.
+    await user.click(screen.getByRole('button', { name: 'reset' }))
+    expect(field).toHaveValue('')
+  })
+
   it('announces the busy state and drops the right section while loading', () => {
     const { rerender } = render(<Input rightSection={<span>clear</span>} />)
     expect(screen.getByText('clear')).toBeInTheDocument()
@@ -182,11 +229,11 @@ describe('Input', () => {
     })
   })
 
-  it('renders a text field unless another type is asked for', () => {
+  it('renders a text field unless a composer asks for another type', () => {
     const { rerender } = render(<Input />)
     expect(screen.getByTestId('input-field')).toHaveAttribute('type', 'text')
 
-    rerender(<Input type="password" />)
+    rerender(<ComposedInput type="password" />)
     expect(screen.getByTestId('input-field')).toHaveAttribute(
       'type',
       'password',
@@ -204,13 +251,121 @@ describe('Input', () => {
     expect(screen.getByRole('textbox')).toHaveValue('a')
   })
 
-  it('forwards native attributes to the field', () => {
-    render(<Input aria-invalid="true" name="email" readOnly />)
+  it('forwards the form-field attributes of its contract to the field', () => {
+    render(
+      <Input
+        aria-describedby="email-error"
+        aria-invalid
+        autoComplete="email"
+        autoFocus
+        data-testid="email-field"
+        form="signup"
+        id="email"
+        inputMode="email"
+        maxLength={40}
+        minLength={3}
+        name="email"
+        placeholder="you@example.com"
+        readOnly
+        required
+      />,
+    )
 
     const field = screen.getByRole('textbox')
+    expect(field).toBe(screen.getByTestId('email-field'))
+    expect(field).toHaveAttribute('id', 'email')
     expect(field).toHaveAttribute('name', 'email')
+    expect(field).toHaveAttribute('form', 'signup')
+    expect(field).toHaveAttribute('placeholder', 'you@example.com')
+    expect(field).toHaveAttribute('autocomplete', 'email')
+    expect(field).toHaveAttribute('inputmode', 'email')
+    expect(field).toHaveAttribute('maxlength', '40')
+    expect(field).toHaveAttribute('minlength', '3')
     expect(field).toHaveAttribute('aria-invalid', 'true')
+    expect(field).toHaveAttribute('aria-describedby', 'email-error')
+    expect(field).toBeRequired()
     expect(field).toHaveAttribute('readonly')
+    expect(field).toHaveFocus()
+  })
+
+  it('is named by ariaLabel', () => {
+    render(<Input ariaLabel="Email" />)
+
+    expect(screen.getByRole('textbox', { name: 'Email' })).toBeInTheDocument()
+  })
+
+  it('leaves the field valid and optional unless told otherwise', () => {
+    render(<Input aria-invalid={false} />)
+
+    const field = screen.getByRole('textbox')
+    expect(field).toHaveAttribute('aria-invalid', 'false')
+    expect(field).not.toBeRequired()
+    expect(field).not.toHaveAttribute('readonly')
+    expect(field).not.toHaveFocus()
+  })
+
+  it('reports focus, blur, key presses and clicks', async () => {
+    const onFocus = vi.fn()
+    const onBlur = vi.fn()
+    const onKeyDown = vi.fn()
+    const onClick = vi.fn()
+    render(
+      <Input
+        onBlur={onBlur}
+        onClick={onClick}
+        onFocus={onFocus}
+        onKeyDown={onKeyDown}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('textbox'))
+    await userEvent.keyboard('{Enter}')
+    await userEvent.tab()
+
+    expect(onClick).toHaveBeenCalledTimes(1)
+    expect(onFocus).toHaveBeenCalledTimes(1)
+    expect(onKeyDown).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: 'Enter',
+      }),
+    )
+    expect(onBlur).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays blocked while loading even when told it is not disabled', () => {
+    render(<Input disabled={false} loading />)
+
+    expect(screen.getByRole('textbox')).toBeDisabled()
+  })
+
+  it('never lets a class or a style from outside restyle the field', () => {
+    render(
+      <Input
+        // @ts-expect-error — className and style are not part of the contract
+        className="outside-class"
+        style={{
+          color: 'red',
+        }}
+      />,
+    )
+
+    const field = screen.getByRole('textbox')
+    expect(field).not.toHaveClass('outside-class')
+    expect(field).not.toHaveStyle({
+      color: 'rgb(255, 0, 0)',
+    })
+  })
+})
+
+describe('ComposedInput', () => {
+  it('marks the root and the field with the slot classes its composer hands it', () => {
+    render(
+      <ComposedInput fieldClass="date-input-root" rootClass="search-field" />,
+    )
+
+    expect(screen.getByRole('textbox')).toHaveClass('input-field')
+    expect(screen.getByRole('textbox')).toHaveClass('date-input-root')
+    expect(screen.getByTestId('input-root')).toHaveClass('search-field')
   })
 })
 
@@ -236,15 +391,20 @@ describe.each(['default', 'ghost'] as const)('Input variant %s', (variant) => {
   })
 })
 
-describe('Input root', () => {
-  it('keeps the field reachable when the root carries extra classes', async () => {
-    const onChange = vi.fn()
-    render(
-      <Input className="w-40" onChange={onChange} rootClassName="max-w-xs" />,
-    )
+describe('Input axes', () => {
+  it('publishes its default variant and size for a theme to select', () => {
+    render(<Input ariaLabel="Name" />)
 
-    await userEvent.type(screen.getByRole('textbox'), 'a')
+    const root = screen.getByTestId('input-root')
+    expect(root).toHaveAttribute('data-variant', 'default')
+    expect(root).toHaveAttribute('data-size', 'md')
+  })
 
-    expect(onChange).toHaveBeenLastCalledWith('a')
+  it('publishes the variant and size it was given', () => {
+    render(<Input ariaLabel="Name" size="lg" variant="ghost" />)
+
+    const root = screen.getByTestId('input-root')
+    expect(root).toHaveAttribute('data-variant', 'ghost')
+    expect(root).toHaveAttribute('data-size', 'lg')
   })
 })

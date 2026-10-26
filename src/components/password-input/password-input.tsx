@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { tv } from 'tailwind-variants'
-import { Input } from '@/components/input'
+import { ComposedInput } from '@/components/input/input.composed'
+import { useLabels } from '@/components/labels-provider'
 import { Eye, EyeOff } from '@/internal/icons'
 
 import type {
@@ -22,20 +23,27 @@ const passwordInput = tv({
   },
 })
 
-const strengthLevelLabels: Record<PasswordStrengthLevel, string> = {
-  medium: 'Medium',
-  strong: 'Strong',
-  'very-strong': 'Very strong',
-  'very-weak': 'Very weak',
-  weak: 'Weak',
-}
+/** Each level reads its verdict from the `passwordInput` labels. */
+const strengthLevelLabelKeys = {
+  medium: 'medium',
+  strong: 'strong',
+  'very-strong': 'veryStrong',
+  'very-weak': 'veryWeak',
+  weak: 'weak',
+} as const satisfies Record<PasswordStrengthLevel, string>
 
+/**
+ * Three status tokens for five levels: the count of filled bars tells the
+ * levels apart, the colour tells the verdict — failing, passable, good. Every
+ * token keeps 3:1 against the empty `bg-muted` bar in light and dark (the
+ * non-text contrast AA asks of a meter), which the old yellow did not.
+ */
 const strengthLevelColors: Record<PasswordStrengthLevel, string> = {
-  medium: 'bg-yellow-500',
-  strong: 'bg-green-500',
-  'very-strong': 'bg-emerald-500',
-  'very-weak': 'bg-red-500',
-  weak: 'bg-orange-500',
+  medium: 'bg-warning',
+  strong: 'bg-success',
+  'very-strong': 'bg-success',
+  'very-weak': 'bg-destructive',
+  weak: 'bg-destructive',
 }
 
 const strengthLevelScore: Record<PasswordStrengthLevel, number> = {
@@ -87,6 +95,7 @@ function PasswordInput({
   onChange,
   ...props
 }: PasswordInputProps) {
+  const labels = useLabels()
   const [visible, setVisible] = useState(false)
   const [typedValue, setTypedValue] = useState(defaultValue ?? '')
   const {
@@ -114,6 +123,9 @@ function PasswordInput({
 
   const toggle = (
     <button
+      aria-label={
+        visible ? labels.passwordInput.hide : labels.passwordInput.show
+      }
       className="password-input-toggle pointer-events-auto flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
       onClick={() => setVisible((v) => !v)}
       tabIndex={-1}
@@ -125,7 +137,7 @@ function PasswordInput({
 
   return (
     <div className={root()} data-testid="password-input-root">
-      <Input
+      <ComposedInput
         {...props}
         defaultValue={defaultValue}
         onChange={handleChange}
@@ -168,7 +180,7 @@ function PasswordInput({
                 className={strengthLabel()}
                 data-testid="password-input-strength-label"
               >
-                {strengthLevelLabels[level]}
+                {labels.passwordInput[strengthLevelLabelKeys[level]]}
               </span>
             </div>
           )}

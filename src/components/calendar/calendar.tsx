@@ -15,7 +15,7 @@ import {
   ChevronRightIcon,
 } from '@/internal/icons'
 
-import { cn } from '@/support/utils'
+import { axes, cn } from '@/support/utils'
 
 import type { CalendarProps } from './calendar.types'
 
@@ -42,7 +42,7 @@ const styles = tv({
       'data-[range-end=true]:rounded-r-(--cell-radius) data-[range-start=true]:rounded-l-(--cell-radius)',
       'data-[range-end=true]:bg-primary data-[range-middle=true]:bg-muted data-[range-start=true]:bg-primary data-[selected-single=true]:bg-primary',
       'data-[range-end=true]:text-primary-foreground data-[range-middle=true]:text-foreground data-[range-start=true]:text-primary-foreground data-[selected-single=true]:text-primary-foreground',
-      'group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-[3px] group-data-[focused=true]/day:ring-ring/50',
+      'group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-3 group-data-[focused=true]/day:ring-ring/50',
       'dark:hover:text-foreground',
       '[&>span]:text-xs [&>span]:opacity-70',
     ],
@@ -136,12 +136,12 @@ function buildClassNames(highlightToday: boolean) {
     ),
     week: cn('mt-2 flex w-full', d.week),
     week_number: cn(
-      'text-[0.8rem] text-muted-foreground select-none',
+      'text-(length:--text-compact) text-muted-foreground select-none',
       d.week_number,
     ),
     week_number_header: cn('w-(--cell-size) select-none', d.week_number_header),
     weekday: cn(
-      'flex-1 rounded-(--cell-radius) font-normal text-[0.8rem] text-muted-foreground select-none',
+      'flex-1 rounded-(--cell-radius) font-normal text-(length:--text-compact) text-muted-foreground select-none',
       d.weekday,
     ),
     weekdays: cn('flex', d.weekdays),
@@ -290,6 +290,9 @@ function Calendar(props: CalendarProps) {
           className={cn(rootProps.className)}
           data-slot="calendar"
           ref={rootRef}
+          {...axes(styles, {
+            size,
+          })}
         />
       ),
     },

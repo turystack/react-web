@@ -39,6 +39,22 @@ function confirmButton(name = 'Confirm') {
   })
 }
 
+// Blocked by a challenge: disabled for assistive tech and for clicks, yet
+// still in the tab order so the keyboard can reach it and hear why.
+function expectBlocked() {
+  const button = confirmButton()
+  expect(button).toHaveAttribute('aria-disabled', 'true')
+  expect(button).not.toHaveAttribute('disabled')
+  expect(button).not.toHaveAttribute('tabindex', '-1')
+}
+
+function expectReady() {
+  const button = confirmButton()
+  expect(button).toBeEnabled()
+  expect(button).not.toHaveAttribute('aria-disabled')
+  expect(button).not.toHaveAccessibleDescription()
+}
+
 describe('Confirm', () => {
   it('presents the question as an alert dialog', () => {
     render(
@@ -431,16 +447,16 @@ describe('Confirm in typed mode', () => {
       />,
     )
 
-    expect(confirmButton()).toBeDisabled()
+    expectBlocked()
 
     await userEvent.click(confirmButton())
     expect(onConfirm).not.toHaveBeenCalled()
 
     await userEvent.type(typedField(), 'acme')
-    expect(confirmButton()).toBeDisabled()
+    expectBlocked()
 
     await userEvent.type(typedField(), '-prod')
-    expect(confirmButton()).toBeEnabled()
+    expectReady()
   })
 
   it('hands the typed text to onConfirm as a string', async () => {
@@ -520,9 +536,42 @@ describe('Confirm in typed mode', () => {
     expect(screen.getByTestId('confirm-hint')).toHaveTextContent(reason)
     expect(typedField()).toHaveAccessibleDescription(reason)
 
-    const host = screen.getByTestId('confirm-blocked')
-    expect(host).toHaveAttribute('tabindex', '0')
-    expect(host).toHaveAccessibleDescription(reason)
+    expectBlocked()
+    expect(confirmButton()).toHaveAccessibleDescription(reason)
+    expect(screen.queryByTestId('confirm-blocked')).not.toBeInTheDocument()
+  })
+
+  it('lets the keyboard land on the blocked action, which then does nothing', async () => {
+    const onConfirm = vi.fn()
+    render(
+      <Confirm
+        acknowledgement="I understand"
+        description="d"
+        mode="acknowledge"
+        onConfirm={onConfirm}
+        open
+        title="t"
+      />,
+    )
+
+    const statementBox = screen.getByRole('checkbox', {
+      name: 'I understand',
+    })
+    await waitFor(() => expect(statementBox).toHaveFocus())
+
+    await userEvent.tab()
+    expect(confirmButton('Cancel')).toHaveFocus()
+    await userEvent.tab()
+    expect(confirmButton()).toHaveFocus()
+
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard(' ')
+    await userEvent.click(confirmButton())
+
+    expect(statementBox).not.toBeChecked()
+
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
   })
 
   it('drops the reason once the challenge is satisfied', async () => {
@@ -539,7 +588,7 @@ describe('Confirm in typed mode', () => {
     await userEvent.type(typedField(), 'acme-prod')
 
     expect(screen.queryByTestId('confirm-hint')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('confirm-blocked')).not.toBeInTheDocument()
+    expectReady()
     expect(typedField()).not.toHaveAccessibleDescription()
   })
 
@@ -581,7 +630,7 @@ describe('Confirm in password mode', () => {
       />,
     )
 
-    expect(confirmButton()).toBeDisabled()
+    expectBlocked()
     expect(screen.getByTestId('confirm-hint')).toHaveTextContent(
       'Enter your password to continue.',
     )
@@ -590,7 +639,7 @@ describe('Confirm in password mode', () => {
     expect(onConfirm).not.toHaveBeenCalled()
 
     await userEvent.type(passwordField(), 'hunter2')
-    expect(confirmButton()).toBeEnabled()
+    expectReady()
   })
 
   it('hands the password to onConfirm as a string', async () => {
@@ -639,13 +688,13 @@ describe('Confirm in password mode', () => {
     )
 
     await userEvent.type(passwordField(), 'hunter2')
-    expect(confirmButton()).toBeEnabled()
+    expectReady()
 
     rerender(<Confirm description="d" mode="password" open={false} title="t" />)
     rerender(<Confirm description="d" mode="password" open title="t" />)
 
     expect(passwordField()).toHaveValue('')
-    expect(confirmButton()).toBeDisabled()
+    expectBlocked()
   })
 
   it('takes a label of its own for the field', () => {
@@ -681,16 +730,16 @@ describe('Confirm in otp mode', () => {
       />,
     )
 
-    expect(confirmButton()).toBeDisabled()
+    expectBlocked()
     expect(screen.getByTestId('confirm-hint')).toHaveTextContent(
       'Enter the whole code to continue.',
     )
 
     await userEvent.type(codeField(), '12345')
-    expect(confirmButton()).toBeDisabled()
+    expectBlocked()
 
     await userEvent.type(codeField(), '6')
-    expect(confirmButton()).toBeEnabled()
+    expectReady()
   })
 
   it('hands the code to onConfirm as a string', async () => {
@@ -726,10 +775,10 @@ describe('Confirm in otp mode', () => {
     )
 
     await userEvent.type(codeField(), '12345')
-    expect(confirmButton()).toBeDisabled()
+    expectBlocked()
 
     await userEvent.type(codeField(), '6')
-    expect(confirmButton()).toBeEnabled()
+    expectReady()
   })
 
   it('cancels without handing the code anywhere', async () => {
@@ -787,8 +836,8 @@ describe('Confirm in acknowledge mode', () => {
       />,
     )
 
-    expect(confirmButton()).toBeDisabled()
-    expect(screen.getByTestId('confirm-blocked')).toHaveAccessibleDescription(
+    expectBlocked()
+    expect(confirmButton()).toHaveAccessibleDescription(
       'Tick the statement above to continue.',
     )
 
@@ -796,7 +845,7 @@ describe('Confirm in acknowledge mode', () => {
     expect(onConfirm).not.toHaveBeenCalled()
 
     await userEvent.click(statementBox())
-    expect(confirmButton()).toBeEnabled()
+    expectReady()
   })
 
   it('hands nothing to onConfirm — there is nothing to hand over', async () => {
@@ -853,7 +902,7 @@ describe('Confirm in acknowledge mode', () => {
     )
 
     await userEvent.click(statementBox())
-    expect(confirmButton()).toBeEnabled()
+    expectReady()
 
     rerender(
       <Confirm
@@ -875,7 +924,7 @@ describe('Confirm in acknowledge mode', () => {
     )
 
     expect(statementBox()).not.toBeChecked()
-    expect(confirmButton()).toBeDisabled()
+    expectBlocked()
   })
 })
 
@@ -904,7 +953,7 @@ describe('Confirm when the caller rejects the answer', () => {
     )
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
-    expect(confirmButton()).toBeEnabled()
+    expectReady()
 
     await userEvent.click(confirmButton())
     expect(onConfirm).toHaveBeenCalledTimes(2)
@@ -947,5 +996,15 @@ describe('Confirm inside a provider that names its own wording', () => {
     expect(screen.getByTestId('confirm-hint')).toHaveTextContent(
       'Digite a senha para continuar.',
     )
+  })
+})
+
+describe('Confirm scrim', () => {
+  it('dims the page with the shared overlay token, blurred', () => {
+    render(<Confirm description="d" open title="t" />)
+
+    const backdrop = screen.getByTestId('confirm-backdrop')
+    expect(backdrop).toHaveClass('bg-overlay', 'backdrop-blur-overlay')
+    expect(backdrop.className).not.toMatch(/bg-black/)
   })
 })

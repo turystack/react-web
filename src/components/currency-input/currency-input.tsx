@@ -5,7 +5,11 @@ import { IMaskInput } from 'react-imask'
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
 import { DropdownMenu } from '@/components/dropdown-menu'
-import { Input } from '@/components/input'
+import {
+  FormFieldReset,
+  useFormFieldControl,
+} from '@/components/form/form.context'
+import { ComposedInput } from '@/components/input/input.composed'
 import {
   DEBOUNCE_MS,
   DEFAULT_SECTION_WIDTH,
@@ -14,10 +18,11 @@ import {
 import type { TuryLabels } from '@/components/labels-provider'
 import { useLabels } from '@/components/labels-provider'
 import { Loader } from '@/components/loader'
-import { Popover } from '@/components/popover'
+import { ComposedPopover } from '@/components/popover/popover.composed'
 import type { CurrencyConfig } from '@/internal/currency'
 import { CURRENCY_CONFIGS } from '@/internal/currency'
 import { ChevronDown, X } from '@/internal/icons'
+import { axes } from '@/support/utils'
 
 import { buttonShared } from '../button/button.shared'
 import type { InputSize } from '../input/input.types'
@@ -104,24 +109,31 @@ const rangeStyles = tv({
     actions:
       'currency-input-actions flex items-center justify-end gap-2 border-border border-t bg-background px-3 py-2',
     clearTrigger:
-      'currency-input-clear-trigger visible cursor-pointer text-muted-foreground hover:text-foreground',
+      'currency-input-clear-trigger visible flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
     content:
       'currency-input-content flex flex-col gap-3 rounded-[inherit] bg-background p-3',
     fields: 'currency-input-fields grid grid-cols-2 gap-2',
+    openTrigger: [
+      'currency-input-open-trigger pointer-events-auto flex h-7 min-w-7 cursor-pointer items-center justify-center rounded-md px-1',
+      'font-medium text-muted-foreground text-sm leading-none outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
+      'disabled:pointer-events-none disabled:cursor-not-allowed',
+    ],
     rangeRoot: 'currency-input-range-root',
   },
   variants: {
     disabled: {
       true: {
-        clearTrigger:
-          'invisible cursor-not-allowed text-muted-foreground opacity-50',
+        clearTrigger: 'invisible cursor-not-allowed opacity-50',
       },
     },
     hasValue: {
       false: {
-        clearTrigger:
-          'invisible cursor-pointer text-muted-foreground hover:text-foreground',
+        clearTrigger: 'invisible',
       },
+    },
+    // The field keeps a focus ring while its bounds are on screen.
+    open: {
+      true: { rangeRoot: 'border-ring ring-3 ring-ring/50' },
     },
   },
 })
@@ -210,10 +222,19 @@ function CurrencySingleInput({
   rightSectionWidth = DEFAULT_SECTION_WIDTH,
   loading,
   debounce,
-  rootClassName,
-  className,
+  ariaLabel,
+  'data-testid': testId = 'currency-input-field',
+  id: explicitId,
+  'aria-describedby': explicitDescribedBy,
+  'aria-invalid': explicitInvalid,
   ...props
 }: CurrencyInputSingleProps) {
+  // Form.Field's id, description/error ids and error state, unless given.
+  const control = useFormFieldControl({
+    describedBy: explicitDescribedBy,
+    id: explicitId,
+    invalid: explicitInvalid,
+  })
   const [internalCurrency, setInternalCurrency] = useState<Currency>(
     variant === 'any' ? 'brl' : (variant as Currency),
   )
@@ -278,10 +299,12 @@ function CurrencySingleInput({
 
   return (
     <div
-      className={rootStyles({
-        className: rootClassName,
-      })}
+      className={rootStyles()}
       data-testid="currency-input-root"
+      data-variant={variant}
+      {...axes(inputShared, {
+        size,
+      })}
     >
       {variant === 'any' ? (
         <DropdownMenu>
@@ -338,13 +361,15 @@ function CurrencySingleInput({
         <IMaskInput
           {...(props as object)}
           aria-busy={loading || undefined}
+          aria-describedby={control.describedBy}
+          aria-invalid={control.invalid}
+          aria-label={ariaLabel}
           className={field({
-            className: inputFieldStyles({
-              className,
-            }),
+            className: inputFieldStyles(),
           })}
-          data-testid="currency-input-field"
+          data-testid={testId}
           disabled={disabled || loading}
+          id={control.id}
           mask={Number as unknown as string}
           normalizeZeros
           /**
@@ -406,10 +431,12 @@ function CurrencyRangeInput({
   placeholder,
   fromPlaceholder,
   toPlaceholder,
+  onClick,
   ...props
 }: CurrencyInputRangeProps) {
   const labels = useLabels()
   const [open, setOpen] = useState(false)
+  const fieldRef = useRef<HTMLInputElement>(null)
   const [internalRange, setInternalRange] = useState<
     CurrencyInputRangeValue | null | undefined
   >(defaultValue)
@@ -422,7 +449,8 @@ function CurrencyRangeInput({
   const selectedRange = isControlled ? value : internalRange
   const displayValue = formatCurrencyRange(selectedRange, config, labels.common)
   const hasValue = !!displayValue
-  const { actions, clearTrigger, content, fields, rangeRoot } = rangeStyles()
+  const { actions, clearTrigger, content, fields, openTrigger, rangeRoot } =
+    rangeStyles({ open })
 
   function commit(nextRange: CurrencyInputRangeValue | null | undefined) {
     const normalized = normalizeRange(nextRange)
@@ -470,89 +498,111 @@ function CurrencyRangeInput({
     setOpen(false)
   }
 
-  function handleClear(event: React.MouseEvent) {
-    event.stopPropagation()
+  function handleClear() {
     commit(null)
     setDraftRange(null)
     setOpen(false)
   }
 
+  /*
+    The button that opens the bounds (it shows the currency symbol) and the
+    clear button are siblings on either side of the field, each a real
+    <button> with its own name — nothing interactive sits inside anything
+    else. The popup is anchored to the field, not to the small button that
+    opens it, so it still opens under the whole field.
+  */
   return (
-    <Popover
-      align="start"
-      content={
-        <>
-          <div className={content()}>
-            <div className={fields()}>
-              <CurrencySingleInput
-                disabled={disabled}
-                onChange={handleFromChange}
-                placeholder={fromPlaceholder ?? labels.currencyInput.minimum}
-                size={size}
-                value={draftRange?.from ?? null}
-                variant={variant}
-              />
-              <CurrencySingleInput
-                disabled={disabled}
-                onChange={handleToChange}
-                placeholder={toPlaceholder ?? labels.currencyInput.maximum}
-                size={size}
-                value={draftRange?.to ?? null}
-                variant={variant}
-              />
-            </div>
-          </div>
-          <div className={actions()}>
-            <Button
-              disabled={disabled}
-              onClick={handleCancel}
-              size="sm"
-              variant="ghost"
-            >
-              {labels.common.cancel}
-            </Button>
-            <Button disabled={disabled} onClick={handleConfirm} size="sm">
-              {labels.common.apply}
-            </Button>
-          </div>
-        </>
-      }
-      onOpenChange={handleOpenChange}
-      open={open}
-      popupClassName="min-w-72 overflow-hidden p-0"
-      side="bottom"
-      sideOffset={8}
-    >
-      <Input
-        {...props}
-        className={rangeRoot()}
-        disabled={disabled}
-        leftSection={
-          <span className="currency-input-symbol font-medium text-muted-foreground text-sm leading-none">
-            {config.symbol}
-          </span>
-        }
-        placeholder={placeholder ?? labels.currencyInput.rangePlaceholder}
-        readOnly
-        rightSection={
-          <ButtonPrimitive
-            aria-label={labels.common.clear}
-            className={clearTrigger({
-              disabled,
-              hasValue,
-            })}
+    <ComposedInput
+      {...props}
+      disabled={disabled}
+      fieldClass={rangeRoot()}
+      leftSection={
+        <ComposedPopover
+          align="start"
+          anchor={fieldRef}
+          asChild
+          content={
+            // The minimum/maximum fields are the popup's, not the Form.Field's
+            // control — the range's own field is.
+            <FormFieldReset>
+              <div className={content()}>
+                <div className={fields()}>
+                  <CurrencySingleInput
+                    disabled={disabled}
+                    onChange={handleFromChange}
+                    placeholder={
+                      fromPlaceholder ?? labels.currencyInput.minimum
+                    }
+                    size={size}
+                    value={draftRange?.from ?? null}
+                    variant={variant}
+                  />
+                  <CurrencySingleInput
+                    disabled={disabled}
+                    onChange={handleToChange}
+                    placeholder={toPlaceholder ?? labels.currencyInput.maximum}
+                    size={size}
+                    value={draftRange?.to ?? null}
+                    variant={variant}
+                  />
+                </div>
+              </div>
+              <div className={actions()}>
+                <Button
+                  disabled={disabled}
+                  onClick={handleCancel}
+                  size="sm"
+                  variant="ghost"
+                >
+                  {labels.common.cancel}
+                </Button>
+                <Button disabled={disabled} onClick={handleConfirm} size="sm">
+                  {labels.common.apply}
+                </Button>
+              </div>
+            </FormFieldReset>
+          }
+          onOpenChange={handleOpenChange}
+          open={open}
+          popupClassName="currency-input-popup min-w-72 overflow-hidden p-0"
+          side="bottom"
+          sideOffset={8}
+        >
+          <button
+            aria-label={labels.currencyInput.open}
+            className={openTrigger()}
             disabled={disabled}
-            onClick={handleClear}
-            tabIndex={hasValue && !disabled ? 0 : -1}
             type="button"
           >
-            <X className="currency-input-clear-icon size-4" />
-          </ButtonPrimitive>
-        }
-        size={size}
-        value={displayValue}
-      />
-    </Popover>
+            <span className="currency-input-symbol">{config.symbol}</span>
+          </button>
+        </ComposedPopover>
+      }
+      onClick={(event) => {
+        onClick?.(event)
+        handleOpenChange(true)
+      }}
+      placeholder={placeholder ?? labels.currencyInput.rangePlaceholder}
+      readOnly
+      ref={fieldRef}
+      rightSection={
+        <ButtonPrimitive
+          aria-label={labels.common.clear}
+          className={clearTrigger({
+            disabled,
+            hasValue,
+          })}
+          disabled={disabled}
+          onClick={handleClear}
+          tabIndex={hasValue && !disabled ? 0 : -1}
+          type="button"
+        >
+          <X className="currency-input-clear-icon size-4" />
+        </ButtonPrimitive>
+      }
+      size={size}
+      value={displayValue}
+    />
   )
 }
 

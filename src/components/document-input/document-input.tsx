@@ -2,11 +2,12 @@ import { Button } from '@base-ui/react'
 import { useState } from 'react'
 import { tv } from 'tailwind-variants'
 import { DropdownMenu } from '@/components/dropdown-menu'
-import { MaskInput } from '@/components/mask-input'
 import { ChevronDown } from '@/internal/icons'
+import { axes } from '@/support/utils'
 
 import { buttonShared } from '../button/button.shared'
 import type { InputSize } from '../input/input.types'
+import { ComposedMaskInput } from '../mask-input/mask-input.composed'
 import type { DocumentInputProps, DocumentType } from './document-input.types'
 
 const MASKS: Record<Exclude<DocumentType, 'any'>, string> = {
@@ -24,8 +25,28 @@ const PLACEHOLDERS: Record<Exclude<DocumentType, 'any'>, string> = {
   cpf: '000.000.000-00',
 }
 
+/**
+ * The root DocumentInput paints itself in every branch, so its own axes —
+ * `size`, and `variant` as the document type — sit on one element that never
+ * also carries MaskInput's `data-variant` (the field's look). The masked
+ * branch adds `w-full` so the wrapper sizes exactly like the MaskInput root it
+ * wraps, in any parent.
+ */
 const rootStyles = tv({
   base: 'document-input-root flex',
+  defaultVariants: {
+    size: 'md',
+  },
+  variants: {
+    masked: {
+      true: 'w-full',
+    },
+    size: {
+      lg: '',
+      md: '',
+      sm: '',
+    } as Record<InputSize, string>,
+  },
 })
 
 const triggerStyles = tv({
@@ -66,7 +87,6 @@ function DocumentInput({
   onChange,
   disabled,
   size,
-  className,
   ...props
 }: DocumentInputProps) {
   const [internalType, setInternalType] = useState<
@@ -104,27 +124,39 @@ function DocumentInput({
     onChange?.(null)
   }
 
+  const rootAxes = axes(rootStyles, {
+    size,
+    variant,
+  })
+
   if (variant !== 'any') {
     return (
-      <MaskInput
-        {...props}
-        className={className}
-        defaultValue={defaultValue?.number ?? undefined}
-        disabled={disabled}
-        mask={mask}
-        onChange={handleChange}
-        placeholder={props.placeholder ?? PLACEHOLDERS[activeType]}
-        size={size}
-        value={maskValue}
-      />
+      <div
+        className={rootStyles({
+          masked: true,
+        })}
+        {...rootAxes}
+        data-testid="document-input-root"
+      >
+        <ComposedMaskInput
+          {...props}
+          defaultValue={defaultValue?.number ?? undefined}
+          disabled={disabled}
+          mask={mask}
+          onChange={handleChange}
+          placeholder={props.placeholder ?? PLACEHOLDERS[activeType]}
+          size={size}
+          value={maskValue}
+        />
+      </div>
     )
   }
 
   return (
     <div
-      className={rootStyles({
-        className,
-      })}
+      className={rootStyles()}
+      {...rootAxes}
+      data-testid="document-input-root"
     >
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
@@ -152,9 +184,9 @@ function DocumentInput({
           ))}
         </DropdownMenu.Content>
       </DropdownMenu>
-      <MaskInput
+      <ComposedMaskInput
         {...props}
-        className={inputFieldStyles()}
+        fieldClass={inputFieldStyles()}
         defaultValue={defaultValue?.number ?? undefined}
         disabled={disabled}
         mask={mask}

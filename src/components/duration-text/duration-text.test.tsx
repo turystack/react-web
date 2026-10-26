@@ -78,3 +78,28 @@ describe('DurationText', () => {
     expect(custom).toHaveTextContent('unknown')
   })
 })
+
+describe('DurationText axes', () => {
+  it('publishes its default variant for a theme to select', () => {
+    render(<DurationText value={90} />)
+
+    expect(
+      screen.getByTestId('duration-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'short')
+  })
+
+  it('publishes the variant it was given, even with no value to write', () => {
+    render(
+      <>
+        <DurationText value={90} variant="clock" />
+        <DurationText value={null} variant="long" />
+      </>,
+    )
+
+    const [clock, fallback] = screen
+      .getAllByTestId('duration-text')
+      .map((value) => value.closest('.formatter-text'))
+    expect(clock).toHaveAttribute('data-variant', 'clock')
+    expect(fallback).toHaveAttribute('data-variant', 'long')
+  })
+})

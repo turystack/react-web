@@ -438,3 +438,55 @@ describe('PhoneInput inside a provider that names a portal container', () => {
     LIST_TIMEOUT,
   )
 })
+
+describe('PhoneInput contract', () => {
+  it('is named by ariaLabel and carries the form-field attributes', () => {
+    render(
+      <PhoneInput
+        aria-invalid
+        ariaLabel="Phone"
+        defaultCountry="BR"
+        id="phone"
+        name="phone"
+      />,
+    )
+
+    const input = screen.getByRole('textbox', { name: 'Phone' })
+    expect(input).toHaveAttribute('id', 'phone')
+    expect(input).toHaveAttribute('name', 'phone')
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(input).toHaveClass('phone-input-field')
+  })
+
+  it('never lets a class from outside restyle the field or its root', () => {
+    const { container } = render(
+      <PhoneInput
+        // @ts-expect-error — className is not part of the contract
+        className="outside-class"
+        defaultCountry="BR"
+      />,
+    )
+
+    expect(container.querySelector('.outside-class')).toBeNull()
+  })
+})
+
+describe('PhoneInput axes', () => {
+  it('publishes its default size and variant for a theme to select', () => {
+    const { container } = render(<PhoneInput defaultCountry="BR" />)
+
+    const root = container.querySelector('.phone-input-root')
+    expect(root).toHaveAttribute('data-size', 'md')
+    expect(root).toHaveAttribute('data-variant', 'default')
+  })
+
+  it('publishes the size and variant it was given', () => {
+    const { container } = render(
+      <PhoneInput defaultCountry="BR" size="lg" variant="ghost" />,
+    )
+
+    const root = container.querySelector('.phone-input-root')
+    expect(root).toHaveAttribute('data-size', 'lg')
+    expect(root).toHaveAttribute('data-variant', 'ghost')
+  })
+})

@@ -140,15 +140,55 @@ describe('Progress', () => {
     )
   })
 
-  it('carries the label styling hook it was handed', () => {
+  it('forwards the semantic label props it was handed', () => {
     render(
-      <Progress
-        label={{ className: 'uppercase', content: 'Upload' }}
-        value={10}
-      />,
+      <Progress label={{ content: 'Upload', required: true }} value={10} />,
     )
 
-    expect(screen.getByText('Upload').closest('label')).toHaveClass('uppercase')
+    expect(screen.getByText('Upload').closest('label')?.textContent).toContain(
+      '*',
+    )
+  })
+})
+
+describe('Progress name', () => {
+  it('is named by ariaLabel when there is no visible label', () => {
+    render(<Progress ariaLabel="3 of 7 done" value={43} />)
+
+    expect(
+      screen.getByRole('progressbar', { name: '3 of 7 done' }),
+    ).toBeInTheDocument()
+  })
+
+  it('is named by its visible label', () => {
+    render(<Progress label="Upload" value={10} />)
+
+    expect(
+      screen.getByRole('progressbar', { name: 'Upload' }),
+    ).toBeInTheDocument()
+  })
+
+  it('is named by the content of a label object', () => {
+    render(<Progress label={{ content: 'Upload' }} value={10} />)
+
+    expect(
+      screen.getByRole('progressbar', { name: 'Upload' }),
+    ).toBeInTheDocument()
+  })
+
+  it('takes ariaLabel over the visible label', () => {
+    render(<Progress ariaLabel="Upload, 10%" label="Upload" value={10} />)
+
+    const bar = screen.getByRole('progressbar', { name: 'Upload, 10%' })
+    expect(bar).not.toHaveAttribute('aria-labelledby')
+  })
+
+  it('stays unnamed with neither', () => {
+    render(<Progress value={10} />)
+
+    const bar = screen.getByRole('progressbar')
+    expect(bar).not.toHaveAttribute('aria-label')
+    expect(bar).not.toHaveAttribute('aria-labelledby')
   })
 })
 
@@ -176,6 +216,26 @@ describe.each(['sm', 'md', 'lg'] as const)('Progress size %s', (size) => {
     expect(screen.getByRole('progressbar')).toHaveAttribute(
       'aria-valuenow',
       '40',
+    )
+  })
+})
+
+describe('Progress axes', () => {
+  it('publishes its default size for a theme to select', () => {
+    render(<Progress value={40} />)
+
+    expect(screen.getByTestId('progress-root')).toHaveAttribute(
+      'data-size',
+      'md',
+    )
+  })
+
+  it('publishes the size it was given', () => {
+    render(<Progress size="sm" value={40} />)
+
+    expect(screen.getByTestId('progress-root')).toHaveAttribute(
+      'data-size',
+      'sm',
     )
   })
 })

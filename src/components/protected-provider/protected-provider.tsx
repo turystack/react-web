@@ -9,6 +9,7 @@ import { canPerform, expandPermissions } from './protected-provider.utils'
 
 export function ProtectedProvider({
   children,
+  loading = false,
   permissions,
 }: ProtectedProviderProps) {
   const value = useMemo(() => {
@@ -17,9 +18,10 @@ export function ProtectedProvider({
     return {
       can: (permissionIds: string[], mode?: ProtectedMode) =>
         canPerform(granted, permissionIds, mode),
+      loading,
       permissions,
     }
-  }, [permissions])
+  }, [loading, permissions])
 
   return <PermissionsContext value={value}>{children}</PermissionsContext>
 }

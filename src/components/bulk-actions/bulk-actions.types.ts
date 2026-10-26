@@ -29,10 +29,24 @@
  *   `selectAll` handler it could not offer without it. Every product needed a
  *   different sentence there, and none of them could say it
  * - Actions past `maxVisible` collapse into a menu rather than growing the bar
+ * - `disabledReason` blocks an action and says why: the button (or menu item)
+ *   stays reachable, a tooltip shows the reason on hover and on focus, and the
+ *   control is described by it. A function of the selection can explain
+ *   what in it does not fit. An action blocked by `permissionIds` says the
+ *   permission is missing unless it brings its own reason; `disabled` still
+ *   blocks without a word
+ * - `placement="inline"` draws the same bar in the flow of the page instead of
+ *   floating over it — for a surface that swaps its toolbar row for the bulk
+ *   actions while something is selected. Like the floating bar it is a group
+ *   named by the count; it still renders nothing while the selection is empty, and Escape pressed
+ *   inside it clears the selection. `position` applies to the floating bar only
  *
  * Implementation:
  * - Sheet variant="floating" modal={false} dismissible={false}
+ * - Inline: a plain group in place, no Sheet
  * - <BulkActions actions={actions} onClear={clear} selection={selectedKeys} />
+ * - <BulkActions actions={actions} onClear={clear} placement="inline" selection={selectedKeys} />
+ * - { id: 'archive', label: 'Archive', onRun, disabledReason: (rows) => rows.some(isArchived) ? 'Some rows are already archived' : undefined }
  *
  * Dependencies: Sheet, Confirm, Button, DropdownMenu, Loader,
  * ProtectedProvider, LabelsProvider
@@ -58,11 +72,14 @@ export type BulkActionConfirm = DistributiveOmit<
 
 export type BulkActionsPosition = 'bottom' | 'top'
 
+export type BulkActionsPlacement = 'floating' | 'inline'
+
 export type BulkAction<T> = {
   /** Confirmation to pass before running; a function of the selection so the
    * dialog can count what it is about to touch. */
   confirm?: BulkActionConfirm | ((selection: T[]) => BulkActionConfirm)
   disabled?: boolean | ((selection: T[]) => boolean) // blocked, and visibly so
+  disabledReason?: string | ((selection: T[]) => string | undefined) // blocks it and says why
   hidden?: boolean | ((selection: T[]) => boolean) // absent from the bar entirely
   icon?: React.ReactNode // node slot, never an icon name
   id: string // stable identity, and the React key
@@ -70,7 +87,7 @@ export type BulkAction<T> = {
   /** Runs the action. The second argument is what a challenge collected —
    * the typed text, the password, the code — and is absent without one. */
   onRun: (selection: T[], confirmation?: string) => void | Promise<void>
-  permissionIds?: PermissionId[] // disables the action when they are not held
+  permissionIds?: PermissionId[] // not held: blocked, says permission denied
   variant?: ButtonVariant // visual weight; destructive for the ones that are
 }
 
@@ -85,6 +102,7 @@ export type BulkActionsProps<T = string> = {
   loading?: boolean // the page is busy; the bar shows it and blocks
   maxVisible?: number // actions shown as buttons; the rest go to a menu. Default 3
   onClear?: () => void // the X, and Escape
-  position?: BulkActionsPosition // which edge it floats over; default bottom
+  placement?: BulkActionsPlacement // floats over the page, or sits in its flow; default floating
+  position?: BulkActionsPosition // which edge the floating bar sits on; default bottom
   selection: T[] // keys, or rows — whatever the surface selects
 }

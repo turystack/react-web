@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { TruncatedText } from './truncated-text'
 
@@ -73,6 +73,53 @@ describe('TruncatedText', () => {
     await userEvent.hover(screen.getByText('abcdefgh...456789'))
 
     expect(await screen.findByText(LONG)).toBeInTheDocument()
+  })
+
+  it('copies the full value, not the shortened text on screen', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText,
+      },
+    })
+
+    render(<TruncatedText copyable position="middle" value={LONG} />)
+
+    expect(screen.getByText('abcdefgh...456789')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Copy' }))
+
+    expect(writeText).toHaveBeenCalledWith(LONG)
+    expect(screen.getByRole('status')).toHaveTextContent('Copied')
+  })
+
+  it('copies a number value as its text', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText,
+      },
+    })
+
+    render(<TruncatedText copyable value={1234} />)
+
+    await userEvent.click(screen.getByTestId('truncated-text-copy'))
+
+    expect(writeText).toHaveBeenCalledWith('1234')
+  })
+
+  it('renders no copy control and no wrapper unless asked', () => {
+    render(<TruncatedText value={LONG} />)
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('truncated-text-root')).not.toBeInTheDocument()
+    expect(screen.getByTestId('truncated-text').className).toContain(
+      'truncated-text-text',
+    )
   })
 
   it('renders as code when asked for code', () => {

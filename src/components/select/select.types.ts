@@ -21,6 +21,20 @@
  *   select is a field and a form must survive its options failing to load
  * - A failed read never disables the trigger: a disabled control fires no
  *   pointer events, so disabling it would put the reason out of reach
+ * - `width` sizes the trigger: `full` (default) fills its column, `auto` fits
+ *   its content and never shrinks below the selected label inside a flex row,
+ *   `sm`/`md`/`lg` are fixed presets (the same scale as SpotlightSearch)
+ * - The trigger is named by `ariaLabel`, or by a `<label htmlFor>` pointing at
+ *   its `id`; with neither it has no name beyond its value. Inside a
+ *   Form.Field it takes the field's id, description/error ids and error state
+ *   without being given an `id` (an explicit `id` wins)
+ * - The clear control is a real <button> named by `labels.common.clear`,
+ *   sitting beside the trigger rather than inside it (no interactive element
+ *   nested in the trigger button); clearing hands focus back to the trigger.
+ *   A `rightSection` takes its place
+ * - Multiple mode: a badge's × removes that value on a pointer click; it is
+ *   hidden from assistive tech and the tab order (the listbox is where the
+ *   keyboard deselects), so the trigger holds nothing interactive
  *
  * Implementation:
  * - Non-searchable single mode renders the Base UI Select listbox
@@ -29,12 +43,18 @@
  * - Generic types: T (option type), I (input value), O (output value)
  * - optionLabel/optionValue can be key of T or extractor function
  * - Every trigger is role="combobox" with aria-expanded and aria-controls
+ * - A `select-root` wrapper holds the trigger and its clear button and takes
+ *   the trigger's width, so `width` behaves the same in a flex row
  * - <Select mode="single" options={items} optionLabel="name" optionValue="id" value={v} onChange={setV} />
  * - <Select mode="multiple" options={items} optionLabel="name" optionValue="id" searchable />
+ * - <Flex><Select mode="single" width="auto" options={items} optionLabel="name" optionValue="id" /></Flex>
+ * - <label htmlFor="interval">Interval</label><Select id="interval" mode="single" … />
+ * - <Select ariaLabel="Billing interval" mode="single" options={intervals} … />
  * - <Select mode="single" creatable creatableOptions={{ onCreate: addTag }} options={tags} … />
  *
  * Dependencies: @base-ui/react (Select, Popover), Badge component, Loader component,
- * EmptyState component, Button component, @turystack/react-hooks (DataOutcome)
+ * EmptyState component, Button component, @turystack/react-hooks (DataOutcome),
+ * Form.Field context, LabelsProvider (common.clear)
  */
 
 import type { DataOutcome } from '@turystack/react-hooks'
@@ -69,6 +89,7 @@ export type SelectCreatableOptions = {
 
 export type SelectSize = 'sm' | 'md' | 'lg'
 export type SelectVariant = 'default' | 'ghost'
+export type SelectWidth = 'auto' | 'full' | 'sm' | 'md' | 'lg'
 
 export type SelectStaticProps<T> = {
   options: T[] // array of option objects
@@ -106,7 +127,10 @@ export type BaseSelectProps<T, O> = {
   loading?: boolean // shows loading state
   size?: SelectSize // visual size
   variant?: SelectVariant // visual style variant
-  clearable?: boolean // shows an X button to clear the value when one is selected (default: true)
+  width?: SelectWidth // trigger width: full (default), auto fits the label, sm/md/lg presets
+  clearable?: boolean // shows a clear button beside the trigger when a value is selected (default: true)
+  ariaLabel?: string // accessible name of the trigger when no visible label names it
+  id?: string // id of the trigger, so a <label htmlFor> can name it; Form.Field supplies one
 }
 
 export type SelectSingleProps<T, I = string, O = I> = BaseSelectProps<T, O> &

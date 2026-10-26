@@ -1,6 +1,14 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 
 import { TuryProvider } from '@/components/tury-provider'
 
@@ -195,5 +203,95 @@ describe('Modal inside a provider that names a portal container', () => {
     )
 
     expect(container).not.toContainElement(screen.getByRole('dialog'))
+  })
+})
+
+describe('Modal scrim', () => {
+  it('dims the page with the shared overlay token, blurred', () => {
+    render(
+      <Modal open>
+        <Modal.Body>Body</Modal.Body>
+      </Modal>,
+    )
+
+    const backdrop = screen.getByTestId('modal-backdrop')
+    expect(backdrop).toHaveClass('bg-overlay', 'backdrop-blur-overlay')
+    expect(backdrop.className).not.toMatch(/bg-black/)
+  })
+})
+
+describe('the overlay token every scrim paints with', () => {
+  // Read from disk, not imported: vitest hands a stylesheet import back empty.
+  // The built-in is named through a variable because this program is typed
+  // for the browser and does not load node's types.
+  const nodeFs = 'node:fs'
+  let stylesheet = ''
+
+  beforeAll(async () => {
+    const fs: { readFileSync(path: string, encoding: 'utf8'): string } =
+      await import(/* @vite-ignore */ nodeFs)
+    stylesheet = fs.readFileSync(
+      new URL('../../index.css', `file://${expect.getState().testPath}`)
+        .pathname,
+      'utf8',
+    )
+  })
+
+  function block(selector: string) {
+    const start = stylesheet.indexOf(`${selector} {`)
+    expect(start).toBeGreaterThanOrEqual(0)
+
+    return stylesheet.slice(start, stylesheet.indexOf('\n}', start))
+  }
+
+  function alpha(declarations: string) {
+    const match = declarations.match(/--overlay:\s*oklch\(0 0 0 \/ (\d+)%\)/)
+    expect(match).not.toBeNull()
+
+    return Number(match?.[1])
+  }
+
+  it('is declared for the light scheme with its blur', () => {
+    const light = block(':root')
+
+    expect(alpha(light)).toBe(50)
+    expect(light).toMatch(/--overlay-blur:\s*8px;/)
+  })
+
+  it('is darker in the dark scheme, where a black veil barely shows', () => {
+    expect(alpha(block('.dark'))).toBe(70)
+    expect(alpha(block('.dark'))).toBeGreaterThan(alpha(block(':root')))
+  })
+
+  it('is mapped into the theme as bg-overlay and backdrop-blur-overlay', () => {
+    const theme = block('@theme inline')
+
+    expect(theme).toMatch(/--color-overlay:\s*var\(--overlay\);/)
+    expect(theme).toMatch(/--blur-overlay:\s*var\(--overlay-blur\);/)
+  })
+})
+
+describe('Modal axes', () => {
+  it('publishes its default size on the popup for a theme to select', () => {
+    render(
+      <Modal open>
+        <Modal.Body>Body</Modal.Body>
+      </Modal>,
+    )
+
+    expect(screen.getByTestId('modal-popup')).toHaveAttribute('data-size', 'md')
+  })
+
+  it('publishes the size it was given', () => {
+    render(
+      <Modal open size="full">
+        <Modal.Body>Body</Modal.Body>
+      </Modal>,
+    )
+
+    expect(screen.getByTestId('modal-popup')).toHaveAttribute(
+      'data-size',
+      'full',
+    )
   })
 })

@@ -8,38 +8,64 @@ import { Separator as SeparatorPrimitive } from '@base-ui/react/separator'
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip'
 import * as React from 'react'
 import { tv } from 'tailwind-variants'
-import { Button } from '@/components/button'
+import { ComposedButton } from '@/components/button/button.composed'
 import { usePortalContainer } from '@/components/portal-provider'
 import { Skeleton } from '@/components/skeleton'
+import {
+  DisabledReason,
+  type DisabledReasonA11y,
+  describedBy,
+} from '@/components/tooltip/tooltip.composed'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ChevronDown, ChevronsLeft, ChevronsRight } from '@/internal/icons'
-import { cn } from '@/support/utils'
 
-import { SidebarContext, useSidebar } from './sidebar.context'
+import {
+  SidebarContext,
+  useOptionalSidebar,
+  useSidebar,
+} from './sidebar.context'
 import type {
   SidebarBrandProps,
   SidebarCollapsible,
+  SidebarContentProps,
   SidebarContextValue,
+  SidebarFooterProps,
   SidebarGroupActionProps,
+  SidebarGroupContentProps,
   SidebarGroupLabelProps,
+  SidebarGroupProps,
+  SidebarHeaderProps,
+  SidebarHeight,
   SidebarMenuActionProps,
+  SidebarMenuBadgeProps,
   SidebarMenuButtonProps,
+  SidebarMenuButtonTooltip,
   SidebarMenuCollapsibleContentProps,
   SidebarMenuCollapsibleProps,
   SidebarMenuCollapsibleTriggerProps,
+  SidebarMenuItemProps,
+  SidebarMenuProps,
   SidebarMenuSkeletonProps,
   SidebarMenuSubButtonProps,
+  SidebarMenuSubItemProps,
+  SidebarMenuSubProps,
   SidebarProps,
   SidebarProviderProps,
+  SidebarSeparatorProps,
   SidebarSide,
   SidebarTriggerProps,
+  SidebarWidth,
 } from './sidebar.types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state'
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = '16rem'
+const SIDEBAR_WIDTH: Record<SidebarWidth, string> = {
+  lg: '20rem',
+  md: '16rem',
+  sm: '14rem',
+}
 const SIDEBAR_WIDTH_MOBILE = '18rem'
 const SIDEBAR_WIDTH_ICON = '3.5rem'
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b'
@@ -65,6 +91,86 @@ const SidebarSetSideCtx = React.createContext<
  */
 const SidebarStructureCtx = React.createContext<SidebarCollapsible>('offcanvas')
 
+/**
+ * The provider's `height`, read by <Sidebar> to decide what its fixed container
+ * is positioned against. Internal rather than on `useSidebar()`: it is how the
+ * two halves of one component agree, not a question a consumer asks.
+ */
+const SidebarHeightCtx = React.createContext<SidebarHeight>('viewport')
+
+/**
+ * What a composing parent injects into the element it was handed.
+ *
+ * `DropdownMenu.Trigger asChild`, a Base UI `render={element}`, a Collapsible or
+ * a Popover trigger clone their child with the props that make it their trigger
+ * — onClick, onKeyDown, aria-expanded, aria-haspopup, data-popup-open, id, ref.
+ * Those arrive here at runtime whatever the public type says, and dropping them
+ * leaves a button that looks like a menu trigger and opens nothing. So the
+ * composable parts read `props as PublicProps & InjectedProps`, take their
+ * semantic props out, and forward the rest to their DOM element.
+ *
+ * Never exported: this is plumbing between components, not a contract, and a
+ * consumer who writes `id` or `data-foo` on a menu button gets a type error.
+ */
+type InjectedProps = {
+  [attribute: string]: unknown
+}
+
+/**
+ * The injected props minus the two a parent must not be able to restyle the
+ * part with. PROP-1 is about the contract; this keeps the runtime honest to it.
+ */
+function composed(injected: InjectedProps): InjectedProps {
+  const { className: _className, style: _style, ...rest } = injected
+  return rest
+}
+
+/**
+ * The reason's props for a composable part: its focus anchor, and its
+ * description joined to the one a composing parent injected, not replacing it.
+ */
+function withReason(
+  a11y: DisabledReasonA11y,
+  injected: InjectedProps,
+  ...own: (string | undefined)[]
+): DisabledReasonA11y {
+  const parent = injected['aria-describedby']
+
+  return {
+    ...a11y,
+    'aria-describedby': describedBy(
+      typeof parent === 'string' ? parent : undefined,
+      ...own,
+      a11y['aria-describedby'],
+    ),
+  }
+}
+
+/**
+ * The accessible name a row takes on the collapsed icon rail. There the label
+ * is hidden and only the icon shows, so a row the consumer did not name with
+ * `ariaLabel` would be announced as an unnamed button — while the words it
+ * needs are already sitting in its tooltip. An explicit `ariaLabel` wins; a
+ * tooltip whose content is not plain text cannot be a name and gives none.
+ */
+function railName(
+  ariaLabel: string | undefined,
+  tooltip: SidebarMenuButtonTooltip | undefined,
+): { 'aria-label'?: string } {
+  if (ariaLabel !== undefined) {
+    return { 'aria-label': ariaLabel }
+  }
+  const text = typeof tooltip === 'string' ? tooltip : tooltip?.children
+  return typeof text === 'string' && text.trim() !== ''
+    ? { 'aria-label': text }
+    : {}
+}
+
+/** A section prop that renders something (null, undefined and false do not). */
+function isSet(node: React.ReactNode): boolean {
+  return node !== undefined && node !== null && node !== false
+}
+
 type SidebarMenuCollapsibleCtxValue = {
   isIconMode: boolean
   label?: React.ReactNode
@@ -75,6 +181,28 @@ const SidebarMenuCollapsibleCtx =
     isIconMode: false,
     open: false,
   })
+
+/**
+ * Stores the toggle through the Cookie Store API: name, value, path and
+ * lifetime go in as fields, not as a hand-assembled `document.cookie` string
+ * (the lint's noDocumentCookie). A browser without the API (Safari before
+ * 18.4, Firefox before 140) keeps the toggle for the page's life only — the
+ * sidebar still works, it just opens from `defaultOpen` next time. A refused
+ * write (a sandboxed frame, cookies blocked) is the same case, not an error.
+ */
+function writeSidebarCookie(open: boolean) {
+  if (typeof window === 'undefined' || !('cookieStore' in window)) {
+    return
+  }
+  window.cookieStore
+    .set({
+      expires: Date.now() + SIDEBAR_COOKIE_MAX_AGE * 1000,
+      name: SIDEBAR_COOKIE_NAME,
+      path: '/',
+      value: String(open),
+    })
+    .catch(() => undefined)
+}
 
 function readSidebarCookie(): boolean | null {
   if (typeof document === 'undefined') {
@@ -92,9 +220,12 @@ function readSidebarCookie(): boolean | null {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const wrapperStyles = tv({
+  defaultVariants: {
+    height: 'viewport',
+  },
   slots: {
     sidebarWrapper: [
-      'layout-sidebar-wrapper group/sidebar-wrapper flex h-svh min-h-0 w-full max-w-full overflow-hidden',
+      'layout-sidebar-wrapper group/sidebar-wrapper flex min-h-0 w-full max-w-full overflow-hidden',
       'has-data-[variant=inset]:bg-sidebar',
       // A right-hand rail reverses the row here rather than in the consumer's
       // JSX. The gap that reserves the rail's width is in normal flow, so with
@@ -112,6 +243,50 @@ const wrapperStyles = tv({
       'md:has-[>[data-side=right]]:flex-row-reverse',
     ],
   },
+  variants: {
+    height: {
+      // `relative` makes the wrapper the box the rail is positioned against
+      // (see the container's `absolute` below) and the offsetParent every
+      // popover inside the shell measures from. `overflow-clip`, not the
+      // `overflow-hidden` above: a hidden box is still a scroll container, and
+      // a collapsed offcanvas rail sits a full rail-width off its edge — focus
+      // landing in anything out there would scroll the frame sideways. A
+      // clipped box cannot be scrolled at all.
+      fill: {
+        sidebarWrapper: 'relative h-full flex-1 overflow-clip',
+      },
+      viewport: {
+        sidebarWrapper: 'h-svh',
+      },
+    },
+  },
+})
+
+/**
+ * The column a banner adds above the row. It takes over the height the row
+ * would have had, and the row inside becomes `fill`: a rail fixed to the window
+ * at `h-svh` would run under the banner and past the bottom of the screen by the
+ * banner's height, where an absolute rail ends where the row ends.
+ */
+const frameStyles = tv({
+  defaultVariants: {
+    height: 'viewport',
+  },
+  slots: {
+    sidebarBanner: 'layout-sidebar-banner w-full shrink-0',
+    sidebarFrame:
+      'layout-sidebar-frame flex min-h-0 w-full max-w-full flex-col overflow-hidden',
+  },
+  variants: {
+    height: {
+      fill: {
+        sidebarFrame: 'h-full flex-1',
+      },
+      viewport: {
+        sidebarFrame: 'h-svh',
+      },
+    },
+  },
 })
 
 const mobileSidebarStyles = tv({
@@ -120,7 +295,7 @@ const mobileSidebarStyles = tv({
   },
   slots: {
     sidebarBackdrop: [
-      'layout-sidebar-backdrop fixed inset-0 z-50 bg-black/50',
+      'layout-sidebar-backdrop fixed inset-0 z-50 bg-overlay backdrop-blur-overlay',
       'data-open:fade-in-0 duration-200 data-open:animate-in',
       'data-closed:fade-out-0 data-closed:animate-out data-closed:fill-mode-forwards',
     ],
@@ -229,11 +404,12 @@ const sidebarGapStyles = tv({
 
 const sidebarContainerStyles = tv({
   defaultVariants: {
+    height: 'viewport',
     variant: 'sidebar',
   },
   slots: {
     sidebarContainer: [
-      'layout-sidebar-container fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width)',
+      'layout-sidebar-container inset-y-0 z-10 hidden w-(--sidebar-width)',
       'transition-[left,right,width] duration-200 ease-linear',
       'data-[side=right]:right-0 data-[side=left]:left-0',
       'data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
@@ -242,6 +418,18 @@ const sidebarContainerStyles = tv({
     ],
   },
   variants: {
+    // Fixed to the window when the shell is the screen. Inside a `fill`
+    // provider the rail is absolute against the wrapper instead, so it ends
+    // where the wrapper ends — a fixed h-svh rail in a framed shell put the
+    // footer a screen below the fold.
+    height: {
+      fill: {
+        sidebarContainer: 'absolute h-full',
+      },
+      viewport: {
+        sidebarContainer: 'fixed h-svh',
+      },
+    },
     variant: {
       floating: {
         sidebarContainer:
@@ -279,14 +467,21 @@ const structureStyles = tv({
     ],
     sidebarFooter:
       'layout-sidebar-footer flex flex-col gap-2 p-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0',
-    sidebarGroup:
+    sidebarGroup: [
       'layout-sidebar-group relative flex w-full min-w-0 flex-col p-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0',
+      // A blocked Group.Action sits in a disabled-reason wrapper named for
+      // it. That wrapper takes the action's corner, so the tooltip anchors on
+      // the `+` and not on an empty box in the flow; any other blocked control
+      // placed in the group keeps its place.
+      '*:data-[reason-slot=sidebar-group-action]:absolute *:data-[reason-slot=sidebar-group-action]:top-2 *:data-[reason-slot=sidebar-group-action]:right-2',
+    ],
     // The same 32px square, at the same gutter, as the brand's action above it
     // and every menu row below it. `top-3.5 right-3 w-5` was a metric of its
     // own: a 20px box 12px from the edge, which put the `+` two pixels off the
     // toggle's axis and nothing else's.
     sidebarGroupAction: [
       'layout-sidebar-group-action absolute top-2 right-2 flex size-8 cursor-pointer items-center justify-center rounded-md p-0',
+      'in-data-[reason-slot=sidebar-group-action]:static aria-disabled:pointer-events-none aria-disabled:opacity-50',
       'text-sidebar-foreground outline-hidden ring-sidebar-ring transition-transform',
       'group-data-[collapsible=icon]:hidden',
       'after:absolute after:-inset-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
@@ -316,8 +511,14 @@ const structureStyles = tv({
       'h-(--collapsible-panel-height)',
       'data-[ending-style]:h-0 data-[starting-style]:h-0',
     ],
-    sidebarMenuItem:
+    sidebarMenuItem: [
       'layout-sidebar-menu-item group/menu-item relative group-data-[collapsible=icon]:w-auto',
+      // A blocked Menu.Action sits in a disabled-reason wrapper named for it,
+      // which takes the action's corner at the row's height (the action's own
+      // peer offsets cannot see past the wrapper).
+      '*:data-[reason-slot=sidebar-menu-action]:absolute *:data-[reason-slot=sidebar-menu-action]:top-1.5 *:data-[reason-slot=sidebar-menu-action]:right-1',
+      'has-data-[size=sm]:*:data-[reason-slot=sidebar-menu-action]:top-1 has-data-[size=lg]:*:data-[reason-slot=sidebar-menu-action]:top-2.5',
+    ],
     sidebarMenuSub: [
       'layout-sidebar-menu-sub mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 gap-1 border-sidebar-border border-l px-2.5 py-0.5',
       'group-data-[collapsible=icon]:hidden',
@@ -336,6 +537,126 @@ const structureStyles = tv({
     ],
   },
 })
+
+// The frame holds the scroller and the two fades, so a fade stays pinned to its
+// edge while the groups scroll under it. The scroller keeps `no-scrollbar`;
+// the fade is the affordance instead: shown on a side only while more of the
+// rail lies past it. Decoration only — it never takes a pointer, and it is
+// hidden on the icon rail, which clips instead of scrolling.
+const contentFadeStyles = tv({
+  slots: {
+    sidebarContentFade: [
+      'layout-sidebar-content-fade pointer-events-none absolute inset-x-0 z-10 h-8',
+      'from-sidebar to-transparent transition-opacity duration-200 motion-reduce:transition-none',
+      'group-data-[collapsible=icon]:hidden',
+    ],
+    sidebarContentFrame:
+      'layout-sidebar-content-frame relative flex min-h-0 flex-1 flex-col',
+  },
+  variants: {
+    edge: {
+      bottom: {
+        sidebarContentFade: 'bottom-0 bg-linear-to-t',
+      },
+      top: {
+        sidebarContentFade: 'top-0 bg-linear-to-b',
+      },
+    },
+    visible: {
+      false: {
+        sidebarContentFade: 'opacity-0',
+      },
+      true: {
+        sidebarContentFade: 'opacity-100',
+      },
+    },
+  },
+})
+
+const { sidebarContentFrame: contentFrameClass } = contentFadeStyles()
+
+/** Which ends of the rail's scroller have more of the rail past them. */
+type SidebarContentEdges = {
+  bottom: boolean
+  top: boolean
+}
+
+/**
+ * Tracks whether Sidebar.Content can scroll toward either end. Measured on
+ * mount, then on scroll (passive) and on resize, at most once a frame. The
+ * scroller and each of its children are observed, so a group that opens (a
+ * Menu.Collapsible) or a row that arrives re-measures as well as a window that
+ * gets shorter; `deps` re-attaches the observers when the children change.
+ */
+function useContentEdges(deps: readonly unknown[]) {
+  const ref = React.useRef<HTMLDivElement | null>(null)
+  const [edges, setEdges] = React.useState<SidebarContentEdges>({
+    bottom: false,
+    top: false,
+  })
+
+  React.useEffect(() => {
+    const element = ref.current
+
+    if (!element) {
+      return
+    }
+
+    let frame = 0
+
+    const measure = () => {
+      frame = 0
+      const offset = element.scrollTop
+      const room = element.scrollHeight - element.clientHeight
+      const top = offset > 1
+      const bottom = room - offset > 1
+
+      setEdges((previous) =>
+        previous.top === top && previous.bottom === bottom
+          ? previous
+          : {
+              bottom,
+              top,
+            },
+      )
+    }
+
+    const schedule = () => {
+      if (frame === 0) {
+        frame = window.requestAnimationFrame(measure)
+      }
+    }
+
+    measure()
+    element.addEventListener('scroll', schedule, {
+      passive: true,
+    })
+
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(schedule)
+
+    if (observer) {
+      observer.observe(element)
+
+      for (const child of Array.from(element.children)) {
+        observer.observe(child)
+      }
+    }
+
+    return () => {
+      element.removeEventListener('scroll', schedule)
+      observer?.disconnect()
+
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame)
+      }
+    }
+  }, deps)
+
+  return [ref, edges] as const
+}
 
 const {
   sidebarHeader: headerClass,
@@ -382,6 +703,10 @@ const brandStyles = tv({
     sidebarBrandAction: [
       'layout-sidebar-brand-action flex shrink-0 items-center justify-center',
       '[&>button]:size-8!',
+      // On the strip the toggle sits above the mark, and at the brand's 4px
+      // gap the two read as one stacked control. The extra room under it is
+      // what makes the toggle its own thing and the logo the start of the rail.
+      'group-data-[collapsible=icon]:pb-2',
     ],
     sidebarBrandLogo: [
       'layout-sidebar-brand-logo flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg',
@@ -433,6 +758,20 @@ const menuButtonStyles = tv({
       // rather than collapsed.
       'group-data-[collapsible=icon]:[&>*:not(:first-child)]:hidden',
     ],
+    // The parts of a sectioned row (leftSection, description, rightSection).
+    // Phrasing only — spans — because the row is a <button>, and a button may
+    // not hold block content: the account row used to be built from Box/Flex
+    // divs inside it. The left section comes first, so on the icon rail the
+    // rule above keeps it (the avatar) and hides the rest.
+    sidebarMenuButtonBody:
+      'layout-sidebar-menu-button-body grid min-w-0 flex-1 text-left leading-tight',
+    sidebarMenuButtonDescription:
+      'layout-sidebar-menu-button-description truncate text-sidebar-foreground/70 text-xs',
+    sidebarMenuButtonLeftSection:
+      'layout-sidebar-menu-button-left-section inline-flex shrink-0 items-center',
+    sidebarMenuButtonRightSection:
+      'layout-sidebar-menu-button-right-section ml-auto inline-flex shrink-0 items-center',
+    sidebarMenuButtonTitle: 'layout-sidebar-menu-button-title truncate',
   },
   variants: {
     isActive: {
@@ -459,7 +798,7 @@ const menuButtonStyles = tv({
       },
       outline: {
         sidebarMenuButton:
-          'bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]',
+          'bg-background shadow-[0_0_0_1px_var(--sidebar-border)] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_var(--sidebar-accent)]',
       },
     },
   },
@@ -469,6 +808,7 @@ const menuActionStyles = tv({
   slots: {
     sidebarMenuAction: [
       'layout-sidebar-menu-action absolute top-1.5 right-1 flex aspect-square w-5 cursor-pointer items-center justify-center rounded-md p-0',
+      'in-data-[reason-slot=sidebar-menu-action]:static aria-disabled:pointer-events-none aria-disabled:opacity-50',
       'text-sidebar-foreground outline-hidden ring-sidebar-ring transition-transform',
       'peer-hover/menu-button:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden',
       'peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1',
@@ -581,11 +921,13 @@ function SidebarProvider({
   open: openProp,
   onOpenChange: setOpenProp,
   variant = 'sidebar',
-  className,
-  style,
+  height = 'viewport',
+  width = 'md',
+  banner,
   children,
-  ...props
 }: SidebarProviderProps) {
+  // With a banner the frame owns the height and the row fills what is left.
+  const rowHeight: SidebarHeight = banner ? 'fill' : height
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
   const [_open, _setOpen] = React.useState(defaultOpen)
@@ -604,8 +946,7 @@ function SidebarProvider({
       } else {
         _setOpen(next)
       }
-      // biome-ignore lint/suspicious/noDocumentCookie: sidebar persistence pattern from shadcn
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${next}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+      writeSidebarCookie(next)
     },
     [setOpenProp, open],
   )
@@ -668,26 +1009,47 @@ function SidebarProvider({
     ],
   )
 
+  const row = (
+    <div
+      className={wrapperStyles({
+        height: rowHeight,
+      }).sidebarWrapper()}
+      data-height={rowHeight}
+      data-slot="sidebar-wrapper"
+      style={
+        {
+          '--sidebar-width': SIDEBAR_WIDTH[width],
+          '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
+        } as React.CSSProperties
+      }
+    >
+      {children}
+    </div>
+  )
+
   return (
     <SidebarSetSideCtx.Provider value={setSide}>
       <SidebarSetCollapsibleCtx.Provider value={setCollapsible}>
         <SidebarContext.Provider value={contextValue}>
-          <div
-            className={wrapperStyles().sidebarWrapper({
-              className,
-            })}
-            data-slot="sidebar-wrapper"
-            style={
-              {
-                '--sidebar-width': SIDEBAR_WIDTH,
-                '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
-                ...style,
-              } as React.CSSProperties
-            }
-            {...props}
-          >
-            {children}
-          </div>
+          <SidebarHeightCtx.Provider value={rowHeight}>
+            {banner ? (
+              <div
+                className={frameStyles({ height }).sidebarFrame()}
+                data-height={height}
+                data-slot="sidebar-frame"
+              >
+                <div
+                  className={frameStyles().sidebarBanner()}
+                  data-slot="sidebar-banner"
+                >
+                  {banner}
+                </div>
+                {row}
+              </div>
+            ) : (
+              row
+            )}
+          </SidebarHeightCtx.Provider>
         </SidebarContext.Provider>
       </SidebarSetCollapsibleCtx.Provider>
     </SidebarSetSideCtx.Provider>
@@ -700,10 +1062,9 @@ function SidebarRoot({
   side = 'left',
   variant: variantProp,
   collapsible = 'offcanvas',
-  className,
   children,
-  ...props
 }: SidebarProps) {
+  const height = React.useContext(SidebarHeightCtx)
   const {
     isMobile,
     state,
@@ -730,13 +1091,10 @@ function SidebarRoot({
           className={sidebarNoneStyles({
             side,
             variant,
-          }).sidebarStatic({
-            className,
-          })}
+          }).sidebarStatic()}
           data-side={side}
           data-slot="sidebar"
           data-variant={variant}
-          {...props}
         >
           {children}
         </div>
@@ -754,13 +1112,7 @@ function SidebarRoot({
           <Dialog.Portal container={portalContainer}>
             <Dialog.Backdrop className={sidebarBackdrop()} />
             <Dialog.Popup
-              // The consumer's className reaches the drawer too. It was
-              // destructured out of `props` and then only ever applied to the
-              // desktop rail, so a `<Layout.Sidebar className>` silently did
-              // nothing below 768px — the one width where nobody is looking.
-              className={sidebarMobilePopup({
-                className,
-              })}
+              className={sidebarMobilePopup()}
               data-mobile="true"
               data-side={side}
               data-sidebar="sidebar"
@@ -771,7 +1123,6 @@ function SidebarRoot({
                   '--sidebar-width': SIDEBAR_WIDTH_MOBILE,
                 } as React.CSSProperties
               }
-              {...props}
             >
               <div className="layout-sidebar-mobile-inner flex h-full w-full flex-col">
                 {children}
@@ -802,13 +1153,11 @@ function SidebarRoot({
         />
         <div
           className={sidebarContainerStyles({
+            height,
             variant,
-          }).sidebarContainer({
-            className,
-          })}
+          }).sidebarContainer()}
           data-side={side}
           data-slot="sidebar-container"
-          {...props}
         >
           <div
             className={sidebarInnerStyles().sidebarInner()}
@@ -825,17 +1174,21 @@ function SidebarRoot({
 
 // ─── SidebarTrigger ───────────────────────────────────────────────────────────
 
-function SidebarTrigger({
-  ariaLabel,
-  asChild,
-  children,
-  className,
-  disabled,
-  loading,
-  onClick,
-  size = 'icon-sm',
-  variant = 'ghost',
-}: React.PropsWithChildren<SidebarTriggerProps>) {
+function SidebarTrigger(props: SidebarTriggerProps) {
+  // Composable: a header can hand the trigger to `DropdownMenu.Trigger
+  // asChild` or a Tooltip trigger. See InjectedProps — Button forwards them
+  // to the element the same way.
+  const {
+    ariaLabel,
+    asChild,
+    children,
+    disabled,
+    loading,
+    onClick,
+    size = 'icon-sm',
+    variant = 'ghost',
+    ...injected
+  } = props as SidebarTriggerProps & InjectedProps
   const { side, state, toggleSidebar } = useSidebar()
 
   // Which way the rail will move, not what it is. A static icon makes the
@@ -846,10 +1199,10 @@ function SidebarTrigger({
   const Chevrons = pointsAway ? ChevronsLeft : ChevronsRight
 
   return (
-    <Button
+    <ComposedButton
+      {...composed(injected)}
       ariaLabel={ariaLabel}
       asChild={asChild}
-      className={className}
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
       disabled={disabled}
@@ -869,22 +1222,21 @@ function SidebarTrigger({
           </span>
         </>
       )}
-    </Button>
+    </ComposedButton>
   )
 }
 
 // ─── Structure ────────────────────────────────────────────────────────────────
 
-function SidebarHeader({ className, ...props }: React.ComponentProps<'div'>) {
+function SidebarHeader({ children }: SidebarHeaderProps) {
   return (
     <div
-      className={headerClass({
-        className,
-      })}
+      className={headerClass()}
       data-sidebar="header"
       data-slot="sidebar-header"
-      {...props}
-    />
+    >
+      {children}
+    </div>
   )
 }
 
@@ -898,22 +1250,9 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<'div'>) {
  * parent to truncate against. The rail is the one place a consumer cannot see
  * their mistake in the default state, so the library owns the incantation.
  */
-function SidebarBrand({
-  action,
-  children,
-  className,
-  logo,
-  subtitle,
-  ...props
-}: SidebarBrandProps) {
+function SidebarBrand({ action, children, logo, subtitle }: SidebarBrandProps) {
   return (
-    <div
-      className={brandClass({
-        className,
-      })}
-      data-slot="sidebar-brand"
-      {...props}
-    >
+    <div className={brandClass()} data-slot="sidebar-brand">
       {logo === undefined ? null : (
         <span className={brandLogoClass()} data-slot="sidebar-brand-logo">
           {logo}
@@ -934,256 +1273,425 @@ function SidebarBrand({
   )
 }
 
-function SidebarFooter({ className, ...props }: React.ComponentProps<'div'>) {
+function SidebarFooter({ children }: SidebarFooterProps) {
   return (
     <div
-      className={footerClass({
-        className,
-      })}
+      className={footerClass()}
       data-sidebar="footer"
       data-slot="sidebar-footer"
-      {...props}
-    />
+    >
+      {children}
+    </div>
   )
 }
 
-function SidebarContent({ className, ...props }: React.ComponentProps<'div'>) {
+function SidebarContent({ children }: SidebarContentProps) {
+  const [scrollerRef, edges] = useContentEdges([children])
+
   return (
-    <div
-      className={contentClass({
-        className,
-      })}
-      data-sidebar="content"
-      data-slot="sidebar-content"
-      {...props}
-    />
+    <div className={contentFrameClass()} data-slot="sidebar-content-frame">
+      <div
+        className={contentClass()}
+        data-sidebar="content"
+        data-slot="sidebar-content"
+        ref={scrollerRef}
+      >
+        {children}
+      </div>
+      {(['top', 'bottom'] as const).map((edge) => (
+        <div
+          aria-hidden="true"
+          className={contentFadeStyles({
+            edge,
+            visible: edges[edge],
+          }).sidebarContentFade()}
+          data-edge={edge}
+          data-slot="sidebar-content-fade"
+          data-state={edges[edge] ? 'visible' : 'hidden'}
+          key={edge}
+        />
+      ))}
+    </div>
   )
 }
 
-function SidebarSeparator({
-  className,
-  ...props
-}: Omit<React.ComponentProps<typeof SeparatorPrimitive>, 'className'> & {
-  className?: string
-}) {
+function SidebarSeparator(_props: SidebarSeparatorProps) {
   return (
     <SeparatorPrimitive
-      className={separatorClass({
-        className,
-      })}
+      className={separatorClass()}
       data-sidebar="separator"
       data-slot="sidebar-separator"
       data-testid="separator"
-      {...props}
     />
   )
 }
 
-function SidebarGroup({ className, ...props }: React.ComponentProps<'div'>) {
+function SidebarGroup({ children }: SidebarGroupProps) {
   return (
     <div
-      className={groupClass({
-        className,
-      })}
+      className={groupClass()}
       data-sidebar="group"
       data-slot="sidebar-group"
-      {...props}
-    />
+    >
+      {children}
+    </div>
   )
 }
 
-function SidebarGroupLabel({ className, ...props }: SidebarGroupLabelProps) {
+function SidebarGroupLabel({ children }: SidebarGroupLabelProps) {
+  // On the collapsed icon rail the label is only faded and pulled up out of
+  // view (opacity 0, -mt-8): without these it would still be read out, and
+  // anything focusable in it still reached, over a rail that shows none of it.
+  const sidebar = useOptionalSidebar()
+  const collapsible = React.useContext(SidebarStructureCtx)
+  const hidden =
+    !!sidebar &&
+    !sidebar.isMobile &&
+    sidebar.state === 'collapsed' &&
+    collapsible === 'icon'
+
   return (
     <div
-      className={groupLabelClass({
-        className,
-      })}
+      aria-hidden={hidden || undefined}
+      className={groupLabelClass()}
       data-sidebar="group-label"
       data-slot="sidebar-group-label"
-      {...props}
-    />
+      inert={hidden || undefined}
+    >
+      {children}
+    </div>
   )
 }
 
-function SidebarGroupAction({ className, ...props }: SidebarGroupActionProps) {
+function SidebarGroupAction(props: SidebarGroupActionProps) {
+  // Composable: see InjectedProps.
+  const {
+    ariaLabel,
+    children,
+    disabled,
+    disabledReason,
+    onClick,
+    ...injected
+  } = props as SidebarGroupActionProps & InjectedProps
+  // A reason blocks the action as surely as `disabled` does, but keeps it in
+  // the tab order: a control nobody can reach cannot tell anyone why.
+  const blocked = Boolean(disabledReason)
+
   return (
-    <ButtonPrimitive
-      className={groupActionClass({
-        className,
-      })}
-      data-sidebar="group-action"
-      data-slot="sidebar-group-action"
-      {...props}
-    />
+    <DisabledReason
+      reason={disabledReason}
+      side="right"
+      slot="sidebar-group-action"
+    >
+      {(a11y) => (
+        <ButtonPrimitive
+          {...composed(injected)}
+          aria-label={ariaLabel}
+          className={groupActionClass()}
+          data-sidebar="group-action"
+          data-slot="sidebar-group-action"
+          disabled={disabled || blocked}
+          focusableWhenDisabled={blocked}
+          onClick={onClick}
+          {...withReason(a11y, injected)}
+        >
+          {children}
+        </ButtonPrimitive>
+      )}
+    </DisabledReason>
   )
 }
 
-function SidebarGroupContent({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function SidebarGroupContent({ children }: SidebarGroupContentProps) {
   return (
     <div
-      className={groupContentClass({
-        className,
-      })}
+      className={groupContentClass()}
       data-sidebar="group-content"
       data-slot="sidebar-group-content"
-      {...props}
-    />
+    >
+      {children}
+    </div>
   )
 }
 
 // ─── Menu ─────────────────────────────────────────────────────────────────────
 
-function SidebarMenu({ className, ...props }: React.ComponentProps<'ul'>) {
+function SidebarMenu({ children }: SidebarMenuProps) {
   return (
-    <ul
-      className={menuClass({
-        className,
-      })}
-      data-sidebar="menu"
-      data-slot="sidebar-menu"
-      {...props}
-    />
+    <ul className={menuClass()} data-sidebar="menu" data-slot="sidebar-menu">
+      {children}
+    </ul>
   )
 }
 
-function SidebarMenuItem({ className, ...props }: React.ComponentProps<'li'>) {
+function SidebarMenuItem({ children }: SidebarMenuItemProps) {
   return (
     <li
-      className={menuItemClass({
-        className,
-      })}
+      className={menuItemClass()}
       data-sidebar="menu-item"
       data-slot="sidebar-menu-item"
-      {...props}
-    />
+    >
+      {children}
+    </li>
   )
 }
 
-function SidebarMenuButton({
-  isActive = false,
-  variant = 'default',
-  size = 'default',
-  tooltip,
-  className,
-  ...props
-}: SidebarMenuButtonProps) {
+function SidebarMenuButton(props: SidebarMenuButtonProps) {
+  // Composable: the account and workspace rows are this button handed to
+  // `DropdownMenu.Trigger asChild`. See InjectedProps.
+  const {
+    ariaLabel,
+    children,
+    description,
+    disabled,
+    disabledReason,
+    isActive = false,
+    leftSection,
+    onClick,
+    rightSection,
+    size = 'default',
+    tooltip,
+    variant = 'default',
+    ...injected
+  } = props as SidebarMenuButtonProps & InjectedProps
   const { isMobile, state } = useSidebar()
   const portalContainer = usePortalContainer()
+  const id = React.useId()
 
-  // No tooltip or sidebar is not in collapsed icon mode → plain button
-  if (!tooltip || state !== 'collapsed' || isMobile) {
-    return (
-      <button
-        aria-current={isActive ? 'page' : undefined}
-        className={cn(
-          menuButtonStyles({
-            isActive,
-            size,
-            variant,
-          }).sidebarMenuButton({
-            className,
-          }),
-        )}
-        data-active={isActive || undefined}
-        data-sidebar="menu-button"
-        data-size={size}
-        data-slot="sidebar-menu-button"
-        {...props}
-      />
-    )
-  }
+  // A reason blocks the row as surely as `disabled` does, but keeps it in the
+  // tab order: a control nobody can reach cannot tell anyone why.
+  const blocked = Boolean(disabledReason)
+  // A tooltip on the collapsed icon rail, where the label is hidden.
+  const onRail = Boolean(tooltip) && state === 'collapsed' && !isMobile
+  // Plain button unless the rail's label tooltip applies. A blocked row takes
+  // the reason's tooltip instead: one tooltip at a time, and the one that
+  // explains wins. The label still names it (below), so nothing is lost to a
+  // screen reader; a sighted user sees why before what.
+  const plain = !onRail || blocked
+  // The explicit ariaLabel, else — on the collapsed rail — the tooltip text.
+  const name: { 'aria-label'?: string } = onRail
+    ? railName(ariaLabel, tooltip)
+    : ariaLabel === undefined
+      ? {}
+      : {
+          'aria-label': ariaLabel,
+        }
+
+  // A sectioned row: [left section] [title / description] [right section],
+  // all spans. It is named by its title alone and described by the second
+  // line and the right section — "Ana Souza, button" before
+  // "ana@acme.com". An aria-label (ariaLabel, or the tooltip on the rail)
+  // replaces the title as the name, so aria-labelledby steps aside for it.
+  const hasDescription = isSet(description)
+  const hasLeftSection = isSet(leftSection)
+  const hasRightSection = isSet(rightSection)
+  const sectioned = hasDescription || hasLeftSection || hasRightSection
+  const titleId = `${id}-title`
+  const detailIds = [
+    hasDescription ? `${id}-description` : undefined,
+    hasRightSection ? `${id}-right` : undefined,
+  ].filter(Boolean)
+
+  const {
+    sidebarMenuButtonBody: bodyClass,
+    sidebarMenuButtonDescription: descriptionClass,
+    sidebarMenuButtonLeftSection: leftSectionClass,
+    sidebarMenuButtonRightSection: rightSectionClass,
+    sidebarMenuButtonTitle: titleClass,
+  } = menuButtonStyles()
+
+  const content = sectioned ? (
+    <>
+      {hasLeftSection ? (
+        <span
+          className={leftSectionClass()}
+          data-slot="sidebar-menu-button-left-section"
+        >
+          {leftSection}
+        </span>
+      ) : null}
+      <span className={bodyClass()} data-slot="sidebar-menu-button-body">
+        <span className={titleClass()} id={titleId}>
+          {children}
+        </span>
+        {hasDescription ? (
+          <span
+            className={descriptionClass()}
+            data-slot="sidebar-menu-button-description"
+            id={`${id}-description`}
+          >
+            {description}
+          </span>
+        ) : null}
+      </span>
+      {hasRightSection ? (
+        <span
+          className={rightSectionClass()}
+          data-slot="sidebar-menu-button-right-section"
+          id={`${id}-right`}
+        >
+          {rightSection}
+        </span>
+      ) : null}
+    </>
+  ) : (
+    children
+  )
+
+  // The reason joins the details, and both join a composing parent's own
+  // description: the row is described by all of them.
+  const buttonProps = (a11y: DisabledReasonA11y) => ({
+    ...composed(injected),
+    ...name,
+    ...withReason(a11y, injected, ...(sectioned ? detailIds : [])),
+    ...(sectioned && name['aria-label'] === undefined
+      ? {
+          'aria-labelledby': titleId,
+        }
+      : {}),
+    'aria-current': isActive ? ('page' as const) : undefined,
+    className: menuButtonStyles({
+      isActive,
+      size,
+      variant,
+    }).sidebarMenuButton(),
+    'data-active': isActive || undefined,
+    'data-sidebar': 'menu-button',
+    'data-size': size,
+    'data-slot': 'sidebar-menu-button',
+    disabled,
+    onClick,
+  })
 
   const tooltipContent =
-    typeof tooltip === 'string' ? tooltip : tooltip.children
+    tooltip === undefined || typeof tooltip === 'string'
+      ? tooltip
+      : tooltip.children
   const tooltipSide =
-    typeof tooltip === 'string' ? ('right' as const) : (tooltip.side ?? 'right')
+    tooltip === undefined || typeof tooltip === 'string'
+      ? ('right' as const)
+      : (tooltip.side ?? 'right')
   const tooltipOffset =
-    typeof tooltip === 'string' ? 4 : (tooltip.sideOffset ?? 4)
+    tooltip === undefined || typeof tooltip === 'string'
+      ? 4
+      : (tooltip.sideOffset ?? 4)
   const tooltipAlign =
-    typeof tooltip === 'string'
+    tooltip === undefined || typeof tooltip === 'string'
       ? ('center' as const)
       : (tooltip.align ?? 'center')
 
+  // One DisabledReason around every branch, so a reason that arrives or
+  // leaves on the focused row only remounts the row, and hands focus back.
   return (
-    <TooltipPrimitive.Provider delay={200}>
-      <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger
-          aria-current={isActive ? 'page' : undefined}
-          className={menuButtonStyles({
-            isActive,
-            size,
-            variant,
-          }).sidebarMenuButton({
-            className,
-          })}
-          data-active={isActive || undefined}
-          data-sidebar="menu-button"
-          data-size={size}
-          data-slot="sidebar-menu-button"
-          {...props}
-        />
-        <TooltipPrimitive.Portal container={portalContainer}>
-          <TooltipPrimitive.Positioner
-            align={tooltipAlign}
-            className="layout-sidebar-tooltip-positioner isolate z-50"
-            side={tooltipSide}
-            sideOffset={tooltipOffset}
-          >
-            <TooltipPrimitive.Popup
-              className={tooltipPopupStyles().sidebarTooltip()}
+    <DisabledReason display="block" reason={disabledReason} side="right">
+      {(a11y) => {
+        if (blocked) {
+          // Base UI's Button keeps it focusable (aria-disabled) and refuses
+          // click, Enter, Space and pointerdown — its own and those a
+          // composing trigger injected — so no menu opens from it either.
+          return (
+            <ButtonPrimitive
+              {...buttonProps(a11y)}
+              disabled
+              focusableWhenDisabled
             >
-              {tooltipContent}
-            </TooltipPrimitive.Popup>
-          </TooltipPrimitive.Positioner>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
-    </TooltipPrimitive.Provider>
+              {content}
+            </ButtonPrimitive>
+          )
+        }
+
+        if (plain || tooltip === undefined) {
+          return (
+            <button type="button" {...buttonProps(a11y)}>
+              {content}
+            </button>
+          )
+        }
+
+        return (
+          <TooltipPrimitive.Provider delay={200}>
+            <TooltipPrimitive.Root>
+              <TooltipPrimitive.Trigger {...buttonProps(a11y)}>
+                {content}
+              </TooltipPrimitive.Trigger>
+              <TooltipPrimitive.Portal container={portalContainer}>
+                <TooltipPrimitive.Positioner
+                  align={tooltipAlign}
+                  className="layout-sidebar-tooltip-positioner isolate z-50"
+                  side={tooltipSide}
+                  sideOffset={tooltipOffset}
+                >
+                  <TooltipPrimitive.Popup
+                    className={tooltipPopupStyles().sidebarTooltip()}
+                  >
+                    {tooltipContent}
+                  </TooltipPrimitive.Popup>
+                </TooltipPrimitive.Positioner>
+              </TooltipPrimitive.Portal>
+            </TooltipPrimitive.Root>
+          </TooltipPrimitive.Provider>
+        )
+      }}
+    </DisabledReason>
   )
 }
 
-function SidebarMenuAction({
-  showOnHover = false,
-  className,
-  ...props
-}: SidebarMenuActionProps) {
+function SidebarMenuAction(props: SidebarMenuActionProps) {
+  // Composable: a row's "more" action is usually a DropdownMenu trigger. See
+  // InjectedProps.
+  const {
+    ariaLabel,
+    children,
+    disabledReason,
+    onClick,
+    showOnHover = false,
+    ...injected
+  } = props as SidebarMenuActionProps & InjectedProps
+  // A reason blocks the action but keeps it in the tab order. Base UI's
+  // Button refuses click, Enter, Space and pointerdown — its own and those a
+  // composing trigger injected — so no menu opens from it either.
+  const blocked = Boolean(disabledReason)
+
   return (
-    <ButtonPrimitive
-      className={menuActionStyles({
-        showOnHover,
-      }).sidebarMenuAction({
-        className,
-      })}
-      data-sidebar="menu-action"
-      data-slot="sidebar-menu-action"
-      {...props}
-    />
+    <DisabledReason
+      reason={disabledReason}
+      side="right"
+      slot="sidebar-menu-action"
+    >
+      {(a11y) => (
+        <ButtonPrimitive
+          {...composed(injected)}
+          aria-label={ariaLabel}
+          className={menuActionStyles({
+            showOnHover,
+          }).sidebarMenuAction()}
+          data-sidebar="menu-action"
+          data-slot="sidebar-menu-action"
+          disabled={blocked}
+          focusableWhenDisabled={blocked}
+          onClick={onClick}
+          {...withReason(a11y, injected)}
+        >
+          {children}
+        </ButtonPrimitive>
+      )}
+    </DisabledReason>
   )
 }
 
-function SidebarMenuBadge({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function SidebarMenuBadge({ children }: SidebarMenuBadgeProps) {
   return (
     <div
-      className={menuBadgeClass({
-        className,
-      })}
+      className={menuBadgeClass()}
       data-sidebar="menu-badge"
       data-slot="sidebar-menu-badge"
-      {...props}
-    />
+    >
+      {children}
+    </div>
   )
 }
 
-function SidebarMenuSkeleton({
-  showIcon = false,
-  className,
-  ...props
-}: SidebarMenuSkeletonProps) {
+function SidebarMenuSkeleton({ showIcon = false }: SidebarMenuSkeletonProps) {
   const [width] = React.useState(
     () => `${Math.floor(Math.random() * 40) + 50}%`,
   )
@@ -1195,12 +1703,9 @@ function SidebarMenuSkeleton({
 
   return (
     <div
-      className={root({
-        className,
-      })}
+      className={root()}
       data-sidebar="menu-skeleton"
       data-slot="sidebar-menu-skeleton"
-      {...props}
     >
       {showIcon && (
         <span className={icon()} data-sidebar="menu-skeleton-icon">
@@ -1224,92 +1729,115 @@ function SidebarMenuSkeleton({
 
 // ─── Sub Menu ─────────────────────────────────────────────────────────────────
 
-function SidebarMenuSub({ className, ...props }: React.ComponentProps<'ul'>) {
+function SidebarMenuSub({ children }: SidebarMenuSubProps) {
   const { isIconMode } = React.useContext(SidebarMenuCollapsibleCtx)
   // In icon mode the sub renders inside a Menu.Popup portal — strip the
   // sidebar-specific indentation/border styles so it looks like a plain list.
   return (
     <ul
-      className={
-        isIconMode
-          ? className
-          : menuSubClass({
-              className,
-            })
-      }
+      className={isIconMode ? undefined : menuSubClass()}
       data-sidebar="menu-sub"
       data-slot="sidebar-menu-sub"
-      {...props}
-    />
+    >
+      {children}
+    </ul>
   )
 }
 
-function SidebarMenuSubItem({
-  className,
-  ...props
-}: React.ComponentProps<'li'>) {
+function SidebarMenuSubItem({ children }: SidebarMenuSubItemProps) {
   const { isIconMode } = React.useContext(SidebarMenuCollapsibleCtx)
   return (
     <li
-      className={
-        isIconMode
-          ? className
-          : menuSubItemClass({
-              className,
-            })
-      }
+      className={isIconMode ? undefined : menuSubItemClass()}
       data-sidebar="menu-sub-item"
       data-slot="sidebar-menu-sub-item"
-      {...props}
-    />
+    >
+      {children}
+    </li>
   )
 }
 
-function SidebarMenuSubButton({
-  size = 'md',
-  isActive = false,
-  className,
-  children,
-  ...props
-}: SidebarMenuSubButtonProps) {
+function SidebarMenuSubButton(props: SidebarMenuSubButtonProps) {
+  // Composable: a router's Link hands its navigation to this anchor through
+  // Base UI `render`. See InjectedProps.
+  const {
+    children,
+    disabledReason,
+    href,
+    isActive = false,
+    onClick,
+    size = 'md',
+    ...injected
+  } = props as SidebarMenuSubButtonProps & InjectedProps
   const { isIconMode } = React.useContext(SidebarMenuCollapsibleCtx)
   const { sidebarMenuDropdownItem: item } = collapsibleDropdownStyles()
-
-  // In icon mode, render as a Menu.Item so keyboard navigation works.
-  if (isIconMode) {
-    return (
-      <Menu.Item
-        aria-current={isActive ? 'page' : undefined}
-        className={item({
-          className,
-        })}
-        data-active={isActive || undefined}
-        data-sidebar="menu-sub-button"
-        data-slot="sidebar-menu-sub-button"
-        render={<a {...props} />}
-      >
-        {children}
-      </Menu.Item>
-    )
-  }
+  // A blocked link drops its href — its own and one a router's Link injected
+  // — so nothing can navigate, not a click, a middle click or "open in new
+  // tab". It keeps the link role and its place in the tab order (an anchor
+  // with no href leaves it on its own), and a click does nothing; in icon
+  // mode the menu keeps it in the arrow order instead.
+  const blocked = Boolean(disabledReason)
+  const anchorProps = (a11y: DisabledReasonA11y) => ({
+    ...composed(injected),
+    ...(blocked
+      ? {
+          'aria-disabled': true,
+          href: undefined,
+          onClick: (event: React.MouseEvent<HTMLAnchorElement>) =>
+            event.preventDefault(),
+        }
+      : {
+          ...(href === undefined
+            ? {}
+            : {
+                href,
+              }),
+          onClick,
+        }),
+    ...withReason(a11y, injected),
+  })
 
   return (
-    <a
-      aria-current={isActive ? 'page' : undefined}
-      className={menuSubButtonStyles({
-        isActive,
-        size,
-      }).sidebarMenuSubButton({
-        className,
-      })}
-      data-active={isActive || undefined}
-      data-sidebar="menu-sub-button"
-      data-size={size}
-      data-slot="sidebar-menu-sub-button"
-      {...props}
-    >
-      {children}
-    </a>
+    <DisabledReason display="block" reason={disabledReason} side="right">
+      {(a11y) =>
+        // In icon mode, render as a Menu.Item so keyboard navigation works;
+        // a blocked one stays in the arrow order and refuses activation.
+        isIconMode ? (
+          <Menu.Item
+            aria-current={isActive ? 'page' : undefined}
+            className={item()}
+            data-active={isActive || undefined}
+            data-sidebar="menu-sub-button"
+            data-slot="sidebar-menu-sub-button"
+            disabled={blocked}
+            render={<a {...anchorProps(a11y)} />}
+          >
+            {children}
+          </Menu.Item>
+        ) : (
+          <a
+            {...anchorProps(a11y)}
+            {...(blocked
+              ? {
+                  role: 'link',
+                  tabIndex: 0,
+                }
+              : {})}
+            aria-current={isActive ? 'page' : undefined}
+            className={menuSubButtonStyles({
+              isActive,
+              size,
+            }).sidebarMenuSubButton()}
+            data-active={isActive || undefined}
+            data-sidebar="menu-sub-button"
+            data-size={size}
+            data-slot="sidebar-menu-sub-button"
+          >
+            {children}
+          </a>
+        )
+      }
+    </DisabledReason>
   )
 }
 
@@ -1325,7 +1853,6 @@ function SidebarMenuSubButton({
  */
 function SidebarMenuCollapsibleRoot({
   children,
-  className,
   defaultOpen,
   label,
   open: openProp,
@@ -1383,7 +1910,6 @@ function SidebarMenuCollapsibleRoot({
       <SidebarMenuCollapsibleCtx.Provider value={ctxValue}>
         <Menu.Root onOpenChange={setMenuOpen} open={menuOpen}>
           <div
-            className={className}
             data-sidebar="menu-collapsible"
             data-slot="sidebar-menu-collapsible"
           >
@@ -1397,7 +1923,6 @@ function SidebarMenuCollapsibleRoot({
   return (
     <SidebarMenuCollapsibleCtx.Provider value={ctxValue}>
       <CollapsiblePrimitive.Root
-        className={className}
         data-sidebar="menu-collapsible"
         data-slot="sidebar-menu-collapsible"
         onOpenChange={handlePanelChange}
@@ -1409,15 +1934,25 @@ function SidebarMenuCollapsibleRoot({
   )
 }
 
-function SidebarMenuCollapsibleTrigger({
-  children,
-  isActive = false,
-  variant = 'default',
-  size = 'default',
-  tooltip,
-  className,
-  ...props
-}: SidebarMenuCollapsibleTriggerProps) {
+function SidebarMenuCollapsibleTrigger(
+  props: SidebarMenuCollapsibleTriggerProps,
+) {
+  // Composable like Menu.Button: a parent that hands it on through `render`
+  // reaches the element. See InjectedProps.
+  const {
+    ariaLabel,
+    children,
+    disabled,
+    disabledReason,
+    isActive = false,
+    size = 'default',
+    tooltip,
+    variant = 'default',
+    ...injected
+  } = props as SidebarMenuCollapsibleTriggerProps & InjectedProps
+  // A reason blocks the trigger as surely as `disabled` does, but keeps it in
+  // the tab order; on the rail it replaces the label tooltip (Menu.Button).
+  const blocked = Boolean(disabledReason)
   const { isIconMode, open } = React.useContext(SidebarMenuCollapsibleCtx)
   const { isMobile } = useSidebar()
   const portalContainer = usePortalContainer()
@@ -1426,36 +1961,61 @@ function SidebarMenuCollapsibleTrigger({
     isActive,
     size,
     variant,
-  }).sidebarMenuButton({
-    className,
-  })
+  }).sidebarMenuButton()
   const sharedDataProps = {
+    ...composed(injected),
+    ...(ariaLabel === undefined
+      ? {}
+      : {
+          'aria-label': ariaLabel,
+        }),
     'data-active': isActive || undefined,
     'data-sidebar': 'menu-button',
     'data-size': size,
     'data-slot': 'sidebar-menu-collapsible-trigger',
+    disabled: disabled || blocked,
   }
 
-  if (isIconMode) {
-    const tooltipContent = !tooltip
-      ? null
-      : typeof tooltip === 'string'
-        ? tooltip
-        : tooltip.children
-    const tooltipSide =
-      !tooltip || typeof tooltip === 'string'
-        ? ('right' as const)
-        : (tooltip.side ?? 'right')
-    const tooltipOffset =
-      !tooltip || typeof tooltip === 'string' ? 4 : (tooltip.sideOffset ?? 4)
-    const tooltipAlign =
-      !tooltip || typeof tooltip === 'string'
-        ? ('center' as const)
-        : (tooltip.align ?? 'center')
+  const tooltipContent = !tooltip
+    ? null
+    : typeof tooltip === 'string'
+      ? tooltip
+      : tooltip.children
+  const tooltipSide =
+    !tooltip || typeof tooltip === 'string'
+      ? ('right' as const)
+      : (tooltip.side ?? 'right')
+  const tooltipOffset =
+    !tooltip || typeof tooltip === 'string' ? 4 : (tooltip.sideOffset ?? 4)
+  const tooltipAlign =
+    !tooltip || typeof tooltip === 'string'
+      ? ('center' as const)
+      : (tooltip.align ?? 'center')
+
+  function iconTrigger(a11y: DisabledReasonA11y) {
+    if (blocked) {
+      // Not a Menu.Trigger: Base UI's would take the `disabled` attribute and
+      // leave the tab order. Nothing opens from a blocked row anyway.
+      return (
+        <ButtonPrimitive
+          className={triggerClass}
+          {...sharedDataProps}
+          {...railName(ariaLabel, tooltip)}
+          focusableWhenDisabled
+          {...withReason(a11y, injected)}
+        >
+          {children}
+        </ButtonPrimitive>
+      )
+    }
 
     if (!tooltipContent || isMobile) {
       return (
-        <Menu.Trigger className={triggerClass} {...sharedDataProps} {...props}>
+        <Menu.Trigger
+          className={triggerClass}
+          {...sharedDataProps}
+          {...withReason(a11y, injected)}
+        >
           {children}
         </Menu.Trigger>
       )
@@ -1468,7 +2028,8 @@ function SidebarMenuCollapsibleTrigger({
             className={triggerClass}
             render={<Menu.Trigger />}
             {...sharedDataProps}
-            {...props}
+            {...railName(ariaLabel, tooltip)}
+            {...withReason(a11y, injected)}
           >
             {children}
           </TooltipPrimitive.Trigger>
@@ -1491,26 +2052,36 @@ function SidebarMenuCollapsibleTrigger({
     )
   }
 
+  // One DisabledReason around every branch, so a reason that arrives or
+  // leaves on the focused trigger only remounts it, and hands focus back.
+  // Expanded, Base UI's Collapsible.Trigger stays focusable when disabled
+  // (aria-disabled) and refuses to toggle, so the reason only adds its part.
   return (
-    <CollapsiblePrimitive.Trigger
-      className={triggerClass}
-      {...sharedDataProps}
-      {...props}
-    >
-      {children}
-      <ChevronDown
-        className="layout-sidebar-menu-collapsible-chevron ml-auto -rotate-90 transition-transform duration-200 data-[open]:rotate-0"
-        data-open={open || undefined}
-        data-slot="sidebar-menu-collapsible-chevron"
-      />
-    </CollapsiblePrimitive.Trigger>
+    <DisabledReason display="block" reason={disabledReason} side="right">
+      {(a11y) =>
+        isIconMode ? (
+          iconTrigger(a11y)
+        ) : (
+          <CollapsiblePrimitive.Trigger
+            className={triggerClass}
+            {...sharedDataProps}
+            {...withReason(a11y, injected)}
+          >
+            {children}
+            <ChevronDown
+              className="layout-sidebar-menu-collapsible-chevron ml-auto -rotate-90 transition-transform duration-200 data-[open]:rotate-0"
+              data-open={open || undefined}
+              data-slot="sidebar-menu-collapsible-chevron"
+            />
+          </CollapsiblePrimitive.Trigger>
+        )
+      }
+    </DisabledReason>
   )
 }
 
 function SidebarMenuCollapsibleContent({
   children,
-  className,
-  ...props
 }: SidebarMenuCollapsibleContentProps) {
   const { isIconMode, label } = React.useContext(SidebarMenuCollapsibleCtx)
   const portalContainer = usePortalContainer()
@@ -1530,11 +2101,8 @@ function SidebarMenuCollapsibleContent({
           sideOffset={4}
         >
           <Menu.Popup
-            className={popup({
-              className,
-            })}
+            className={popup()}
             data-slot="sidebar-menu-collapsible-content"
-            {...props}
           >
             {label && (
               <Menu.Group>
@@ -1553,11 +2121,8 @@ function SidebarMenuCollapsibleContent({
 
   return (
     <CollapsiblePrimitive.Panel
-      className={collapsiblePanelClass({
-        className,
-      })}
+      className={collapsiblePanelClass()}
       data-slot="sidebar-menu-collapsible-content"
-      {...props}
     >
       {children}
     </CollapsiblePrimitive.Panel>

@@ -10,12 +10,25 @@
  * - Supports either Pagination or infinite scroll, not both
  * - Infinite mode uses an IntersectionObserver sentinel plus a manual fallback
  * - Keeps list layout generic; item visuals belong to renderItem
+ * - activeKey marks the item currently open elsewhere (a side preview in a
+ *   split view): its row gets the accent background and aria-current="true".
+ *   It is compared with the item's key as a string, so 7 and "7" match
  * - `outcome` is the alternative to `items` + `loading` + `error`: it carries
  *   the five states of a remote read and the list paints all of them,
  *   including the denied one, which is the empty state's shape without a
  *   retry because retrying a denial changes nothing
  * - `outcome` and `items`/`loading`/`error` are mutually exclusive: a list
  *   reads from a query or from a prop, never from both
+ * - `onItemClick` makes every row act on a click: the row takes focus with
+ *   Tab and Enter or Space fires it too. A click on a control inside the row
+ *   (button, link, input, label, select, textarea, contenteditable, the
+ *   control roles, anything marked `data-row-click-ignore`, and content
+ *   portalled out of the row such as an open DropdownMenu item) belongs to
+ *   that control and does not fire it, so a row's controls need no
+ *   stopPropagation — the same rule Table's `onRowClick` follows. A key is the
+ *   row's only when pressed on the row itself
+ * - `ariaLabel` names the list itself, for a list whose purpose no visible
+ *   heading states (a list inside a popover, a panel)
  * - A failed next page is not a failed read: `infinite.error` keeps the rows
  *   on screen and puts the failure in the footer, where the control that
  *   asked for the page already is
@@ -25,6 +38,8 @@
  * - <List items={orders} itemKey="id" renderItem={renderOrder} pagination={pagination} />
  * - <List items={orders} itemKey="id" renderItem={renderOrder} infinite={{ hasMore, onLoadMore }} />
  * - <List outcome={outcome} itemKey="id" renderItem={renderOrder} />
+ * - <List items={orders} itemKey="id" renderItem={renderOrder} activeKey={openOrderId} />
+ * - <List items={orders} itemKey="id" renderItem={renderOrder} onItemClick={(order) => open(order.id)} />
  *
  * Dependencies: Pagination component, Loader component, Skeleton component,
  * EmptyState component, Button component, LoadingOverlay component,
@@ -58,6 +73,9 @@ export type ListInfiniteProps = {
 type ListBaseProps<T> = {
   itemKey: ListItemKey<T> // stable React key extractor
   renderItem: (item: T, index: number) => ReactNode // item renderer
+  activeKey?: string | number // key of the item open in a side preview; highlighted + aria-current
+  ariaLabel?: string // names the list for assistive technology
+  onItemClick?: (item: T, index: number) => void // makes rows focusable and clickable; controls inside a row keep their own clicks
   loadingRows?: number // number of default skeleton rows
   deniedSection?: ReactNode // content shown when the outcome is denied
   emptySection?: ReactNode // content shown when items are empty

@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from 'react'
 import { tv } from 'tailwind-variants'
+import { axes } from '@/support/utils'
 
 import type { TypographyProps } from './typography.types'
 
@@ -39,6 +40,17 @@ const typographyStyles = tv({
       sm: 'max-w-sm',
       xs: 'max-w-xs',
     },
+    /**
+     * One line, nothing hidden. `truncate` also stops wrapping, but it clips —
+     * the wrong trade for a short label whose every word is the information.
+     */
+    noWrap: {
+      true: 'whitespace-nowrap',
+    },
+    /**
+     * `inherit` sets no font size, so the text takes its container's — a
+     * label inside a button or a table cell scales with it.
+     */
     size: {
       '2xl': 'text-2xl',
       '3xl': 'text-3xl',
@@ -49,6 +61,7 @@ const typographyStyles = tv({
       '8xl': 'text-8xl',
       '9xl': 'text-9xl',
       base: 'typography text-base',
+      inherit: '',
       lg: 'text-lg',
       sm: 'text-sm',
       xl: 'text-xl',
@@ -57,8 +70,14 @@ const typographyStyles = tv({
     truncate: {
       true: 'inline-block max-w-full truncate',
     },
+    /**
+     * `inherit` paints nothing, so the colour comes from the container — a
+     * menu item's active and hover colour reach a label inside it instead of
+     * being overridden by the label's own `text-foreground`.
+     */
     variant: {
       default: 'text-foreground',
+      inherit: '',
       muted: 'text-muted-foreground',
     },
     weight: {
@@ -66,6 +85,7 @@ const typographyStyles = tv({
       bold: 'font-bold',
       extrabold: 'font-extrabold',
       extralight: 'font-extralight',
+      inherit: '',
       light: 'font-light',
       medium: 'font-medium',
       normal: 'font-normal',
@@ -80,6 +100,7 @@ function Typography({
   centered,
   component: Component = 'span',
   maxWidth,
+  noWrap,
   size,
   variant,
   weight,
@@ -94,10 +115,15 @@ function Typography({
         centered,
         destructive,
         maxWidth,
+        noWrap,
         size,
         truncate,
         variant,
         weight,
+      })}
+      {...axes(typographyStyles, {
+        size,
+        variant,
       })}
       data-testid="typography"
     >

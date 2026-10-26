@@ -12,7 +12,9 @@
  *   for when a challenge unlocks the button live in one place both components
  *   read, so "the typed text matches" cannot come to mean two things
  * - The confirm button stays disabled until the challenge is satisfied, and it
- *   states why it is blocked instead of only looking dead
+ *   states why it is blocked instead of only looking dead: it is
+ *   aria-disabled, not `disabled`, so it keeps its tab stop and is described
+ *   by the reason, while its clicks and keys do nothing
  * - Challenge modes hand what was collected to `onConfirm` — the consumer
  *   validates it; this component never checks a secret, stores it past the
  *   popover's life, or logs it
@@ -26,6 +28,9 @@
  *
  * Implementation:
  * - Popover under it, so placement, dismissal and focus are the primitive's
+ * - The child control (a Button) is the trigger itself through Popover
+ *   `asChild`: it carries aria-expanded and aria-haspopup, with no wrapper
+ *   around it. Non-element children fall back to Popover's wrapper
  * - <Popconfirm title="Delete this booking?" onConfirm={remove}>
  *     <Button variant="destructive" size="icon-sm"><Trash2 /></Button>
  *   </Popconfirm>

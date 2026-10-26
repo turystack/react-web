@@ -64,3 +64,21 @@ describe('FileSizeText', () => {
     expect(custom).toHaveTextContent('unknown')
   })
 })
+
+describe('FileSizeText axes', () => {
+  it('publishes its default variant for a theme to select', () => {
+    render(<FileSizeText value={512} />)
+
+    expect(
+      screen.getByTestId('file-size-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'decimal')
+  })
+
+  it('publishes the variant it was given', () => {
+    render(<FileSizeText value={1_433_600} variant="binary" />)
+
+    expect(
+      screen.getByTestId('file-size-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'binary')
+  })
+})

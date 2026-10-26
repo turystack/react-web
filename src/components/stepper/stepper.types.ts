@@ -13,7 +13,29 @@
  *   takes over on the last step
  * - `connector` draws the rule between two steps ('line' by default, 'dashed',
  *   or 'none'); it never follows the last step and it follows the orientation
+ * - `variant="path"` is the Salesforce-style path: the steps are a single row of
+ *   chevron stages, the current one filled, the completed ones checked, the
+ *   rest muted. It is always horizontal, never wraps and draws no connector —
+ *   the chevrons are the separators, so `orientation`, `wrap`, `connector`,
+ *   `iconPosition`, `radius` and `iconSize` do not apply. A label that does not
+ *   fit truncates to one centred line (the full text stays the accessible name,
+ *   and a string label is also the tooltip `title`); a description is kept for
+ *   assistive technology only. Clicking a stage is the same request as on
+ *   every variant, `onActiveChange`, gated by `allowNextStepsSelect` — a
+ *   controlled owner that wants to confirm a stage change before moving does
+ *   it there
+ * - A blocked step says why. `Stepper.Step`'s `disabledReason` blocks it (a
+ *   reason implies blocked) and is shown in a tooltip on hover and keyboard
+ *   focus; the step stays in the tab order, is described by the reason, and a
+ *   click does nothing. Without one, a step ahead held back by the linear
+ *   default says `stepper.blocked` ("Finish the current step first"); a step
+ *   closed by an explicit `allowStepClick={false}` stays silently disabled
  * - `keepMounted` keeps inactive panels in the DOM via `hidden` + `inert` (state preserved)
+ * - The panel area only renders when there is something to show: a step (or a
+ *   `Stepper.Completed`) with no children leaves no empty section behind, so a
+ *   childless `variant="path"` works as a status bar with no space under it.
+ *   With `keepMounted` the area stays mounted while any step has children and
+ *   is `hidden` while the active one has none
  * - `Stepper.Completed` renders when `active === stepCount`
  * - Animation via `tw-animate-css` data-state utilities; respects `prefers-reduced-motion`
  *
@@ -22,6 +44,7 @@
  * - Compound: `Stepper.Step`, `Stepper.Completed`, `Stepper.Previous`, `Stepper.Next`
  * - `<ol>` semantic root, `aria-current="step"` on active, live region announces changes
  * - Use `useStepper()` hook for custom buttons / consumers
+ * - <Stepper.Step disabledReason="Add a payment method first" label="Billing" />
  *
  * Dependencies: tailwind-variants, @turystack/react-icons, @/components/button
  */
@@ -36,7 +59,7 @@ export type StepperSize = 'sm' | 'md' | 'lg'
 
 export type StepperRadius = 'none' | 'sm' | 'md' | 'lg' | 'xl' | 'full'
 
-export type StepperVariant = 'numbered' | 'dotted' | 'icon'
+export type StepperVariant = 'numbered' | 'dotted' | 'icon' | 'path'
 
 export type StepperConnector = 'none' | 'line' | 'dashed'
 
@@ -68,7 +91,7 @@ export type StepperProps = {
   progressIcon?: StepFragment // shown when a step is loading
   radius?: StepperRadius // indicator border-radius (default 'xl')
   size?: StepperSize // default 'md'
-  variant?: StepperVariant // indicator preset (default 'numbered')
+  variant?: StepperVariant // indicator preset, or 'path' for chevron stages (default 'numbered')
   wrap?: boolean // allow indicator list to wrap (horizontal only, default true)
 }
 
@@ -78,6 +101,7 @@ export type StepperStepProps = {
   children?: ReactNode // panel body rendered when this step is active
   completedIcon?: StepFragment // per-step override
   description?: ReactNode // sub-line below label
+  disabledReason?: string // blocks the step, stays focusable, says why
   icon?: StepFragment // per-step override
   label?: ReactNode // step title
   loading?: boolean // forces progressIcon

@@ -28,6 +28,10 @@
  *   value already sits in the field's own box, and anything whose height this
  *   component cannot dictate — a Textarea that grows, a caller's Select — is
  *   drawn over that box instead of inside it
+ * - `copyable` puts a CopyButton beside the value, a sibling of the button
+ *   that opens the editor rather than a child of it, so copying never opens
+ *   the editor; in `stable` it sits over the box's right edge, left of the
+ *   pencil when there is one, and hides while the editor is open
  *
  * Implementation:
  * - The resting box is styled from `inputShared`, the same tailwind-variants
@@ -40,7 +44,7 @@
  *     {({ value, onChange }) => <CurrencyInput onChange={onChange} value={value} variant="brl" />}
  *   </EditableText>
  *
- * Dependencies: Input, Textarea, Button, Loader, LabelsProvider, FormatterText
+ * Dependencies: Input, Textarea, Button, CopyButton, Loader, LabelsProvider, FormatterText
  */
 
 import type { InputSize } from '@/components/input/input.types'
@@ -73,7 +77,7 @@ type EditableTextBaseProps<T> = {
   actions?: boolean // renders confirm/cancel buttons beside the editor
   ariaLabel?: string // names the field for assistive technology
   children?: (state: EditableTextEditorState<T | null>) => React.ReactNode // the editor
-  copyable?: boolean // adds a control that copies the displayed value
+  copyable?: boolean // adds a copy control beside the value (never inside its button); copying never opens the editor
   defaultEditing?: boolean // uncontrolled initial open state
   defaultValue?: T | null // uncontrolled initial value
   destructive?: boolean // renders the value in the error colour

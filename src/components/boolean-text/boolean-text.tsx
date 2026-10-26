@@ -44,6 +44,9 @@ export function BooleanText(props: BooleanTextProps) {
     return (
       <FormatterText
         {...props}
+        published={{
+          'data-variant': variant,
+        }}
         testId="boolean-text"
         text={props.fallback ?? DEFAULT_FALLBACK}
       />
@@ -55,15 +58,22 @@ export function BooleanText(props: BooleanTextProps) {
   return (
     <FormatterText
       {...props}
+      published={{
+        'data-variant': variant,
+      }}
       testId="boolean-text"
       text={word}
       tone={toneOf(props.value, props.colored)}
     >
       {variant === 'check' ? (
-        <>
+        // The value element is an inline span, and an svg is a block box
+        // (Tailwind's preflight), so a bare icon would sit at the left of a
+        // centred table cell. An inline-flex box around it is an inline box
+        // again: it follows the cell's text-align and centres on the line.
+        <span className="boolean-text-check inline-flex items-center align-middle">
           {props.value ? <Check /> : <X />}
           <span className="boolean-text-label sr-only">{word}</span>
-        </>
+        </span>
       ) : undefined}
     </FormatterText>
   )

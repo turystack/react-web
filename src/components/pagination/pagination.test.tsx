@@ -29,7 +29,7 @@ describe('Pagination offset', () => {
     )
 
     expect(
-      screen.getByRole('navigation', { name: 'pagination' }),
+      screen.getByRole('navigation', { name: 'Pagination' }),
     ).toHaveTextContent('21-40 of 100')
   })
 
@@ -46,7 +46,7 @@ describe('Pagination offset', () => {
     )
 
     expect(
-      screen.getByRole('navigation', { name: 'pagination' }),
+      screen.getByRole('navigation', { name: 'Pagination' }),
     ).toHaveTextContent('41-45 of 45')
   })
 
@@ -197,7 +197,7 @@ describe('Pagination offset', () => {
     )
 
     expect(
-      screen.getByRole('navigation', { name: 'pagination' }),
+      screen.getByRole('navigation', { name: 'Pagination' }),
     ).toHaveTextContent('0-0 of 0')
     expectPages(['1'], ['2'])
   })
@@ -485,6 +485,172 @@ describe('Pagination labels', () => {
 
     expect(screen.getByTestId('pagination-root')).toHaveTextContent(
       '21-40 de 100',
+    )
+  })
+})
+
+describe('Pagination accessible names', () => {
+  it('names the rows-per-page Select in offset mode', () => {
+    render(
+      <Pagination
+        mode="offset"
+        onPageChange={vi.fn()}
+        onRowsPerPageChange={vi.fn()}
+        page={1}
+        rowsPerPage={20}
+        total={100}
+      />,
+    )
+
+    expect(screen.getByRole('combobox')).toHaveAccessibleName('Rows per page')
+  })
+
+  it('names the rows-per-page Select in cursor mode', () => {
+    render(
+      <Pagination
+        mode="cursor"
+        onRowsPerPageChange={vi.fn()}
+        rowsPerPage={20}
+      />,
+    )
+
+    expect(screen.getByRole('combobox')).toHaveAccessibleName('Rows per page')
+  })
+
+  it.each(['offset', 'cursor'] as const)(
+    'takes every name from the provider in %s mode',
+    (mode) => {
+      render(
+        <TuryProvider
+          labels={{
+            pagination: {
+              label: 'Paginação',
+              next: 'Próxima página',
+              previous: 'Página anterior',
+              rowsPerPage: 'Linhas por página',
+            },
+          }}
+        >
+          {mode === 'offset' ? (
+            <Pagination
+              mode="offset"
+              onPageChange={vi.fn()}
+              onRowsPerPageChange={vi.fn()}
+              page={2}
+              rowsPerPage={20}
+              total={100}
+            />
+          ) : (
+            <Pagination
+              hasNextPage
+              hasPreviousPage
+              mode="cursor"
+              onRowsPerPageChange={vi.fn()}
+              rowsPerPage={20}
+            />
+          )}
+        </TuryProvider>,
+      )
+
+      expect(
+        screen.getByRole('navigation', { name: 'Paginação' }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Próxima página' }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Página anterior' }),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('combobox')).toHaveAccessibleName(
+        'Linhas por página',
+      )
+    },
+  )
+})
+
+describe('Pagination at narrow widths', () => {
+  function offset() {
+    return (
+      <Pagination
+        mode="offset"
+        onPageChange={vi.fn()}
+        onRowsPerPageChange={vi.fn()}
+        page={3}
+        rowsPerPage={10}
+        total={200}
+      />
+    )
+  }
+
+  it('is a container that wraps its groups instead of overflowing', () => {
+    render(offset())
+
+    expect(screen.getByTestId('pagination-root')).toHaveClass(
+      'pagination-root',
+      '@container/pagination',
+      'flex-wrap',
+      'min-w-0',
+      'gap-y-2',
+    )
+  })
+
+  it('pushes the wrapped controls to the right and lets them wrap again', () => {
+    render(offset())
+
+    expect(screen.getByTestId('pagination-controls')).toHaveClass(
+      'pagination-controls',
+      'ml-auto',
+      'flex-wrap',
+      'min-w-0',
+    )
+  })
+
+  it('hides the page-number list below the medium width and keeps prev/next', () => {
+    render(offset())
+
+    const pages = screen.getByTestId('pagination-pages')
+    expect(pages).toHaveClass(
+      'pagination-pages',
+      'hidden',
+      '@md/pagination:flex',
+    )
+    expect(pages).toContainElement(screen.getByRole('button', { name: '3' }))
+    expect(pages).not.toContainElement(screen.getByTestId('pagination-prev'))
+    expect(pages).not.toContainElement(screen.getByTestId('pagination-next'))
+    expect(screen.getByTestId('pagination-info')).not.toHaveClass('hidden')
+  })
+
+  it('keeps range, prev, pages, next in reading order', () => {
+    render(offset())
+
+    const children = Array.from(
+      screen.getByTestId('pagination-controls').children,
+    )
+    expect(
+      [
+        'pagination-info',
+        'pagination-prev',
+        'pagination-pages',
+        'pagination-next',
+      ].map((id) => children.indexOf(screen.getByTestId(id))),
+    ).toEqual([0, 1, 2, 3])
+  })
+
+  it('wraps in cursor mode as well', () => {
+    render(
+      <Pagination
+        hasNextPage
+        mode="cursor"
+        onRowsPerPageChange={vi.fn()}
+        rowsPerPage={20}
+      />,
+    )
+
+    expect(screen.getByTestId('pagination-root')).toHaveClass('flex-wrap')
+    expect(screen.getByTestId('pagination-controls')).toHaveClass(
+      'ml-auto',
+      'flex-wrap',
+      'gap-2',
     )
   })
 })

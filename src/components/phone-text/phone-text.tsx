@@ -47,14 +47,16 @@ function shape(e164: string, variant: PhoneTextVariant): string {
 export function PhoneText(props: PhoneTextProps) {
   const labels = useLabels()
   const e164 = toE164(props.value)
+  const variant = props.variant ?? 'national'
+  const published = {
+    'data-variant': variant,
+  }
 
   /**
    * A redacted number is passed through untouched: the parser would reject it,
    * and there is nothing to shape when most of the digits are gone.
    */
-  const readable = props.privacy
-    ? raw(props.value)
-    : shape(e164, props.variant ?? 'national')
+  const readable = props.privacy ? raw(props.value) : shape(e164, variant)
 
   /** A link would have to carry digits a redacted value no longer has. */
   const linkable = !props.privacy && Boolean(e164)
@@ -64,6 +66,7 @@ export function PhoneText(props: PhoneTextProps) {
     return (
       <FormatterText
         {...props}
+        published={published}
         testId="phone-text"
         text={props.fallback ?? DEFAULT_FALLBACK}
       />
@@ -73,6 +76,7 @@ export function PhoneText(props: PhoneTextProps) {
   return (
     <FormatterText
       {...props}
+      published={published}
       rightSection={
         props.whatsapp && linkable ? (
           <Button

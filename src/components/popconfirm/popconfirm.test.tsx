@@ -15,13 +15,47 @@ function Example(props: Partial<PopconfirmSimpleProps> = {}) {
   )
 }
 
+function trigger() {
+  return screen.getByRole('button', {
+    name: 'Delete',
+  })
+}
+
 describe('Popconfirm', () => {
+  it('makes the Button itself the trigger, not a wrapper around it', async () => {
+    render(<Example />)
+
+    const button = trigger()
+
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    expect(button).toHaveAttribute('data-slot', 'button')
+    expect(button.parentElement).not.toHaveAttribute('role', 'button')
+    expect(screen.queryByTestId('popover-trigger')).not.toBeInTheDocument()
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+
+    await userEvent.click(button)
+
+    expect(await screen.findByTestId('popconfirm')).toBeInTheDocument()
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('opens from the keyboard on the Button', async () => {
+    render(<Example />)
+
+    trigger().focus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(await screen.findByTestId('popconfirm-title')).toHaveTextContent(
+      'Delete this booking?',
+    )
+  })
+
   it('asks only once the control is pressed', async () => {
     render(<Example />)
 
     expect(screen.queryByTestId('popconfirm')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
 
     expect(await screen.findByTestId('popconfirm-title')).toHaveTextContent(
       'Delete this booking?',
@@ -33,7 +67,7 @@ describe('Popconfirm', () => {
 
     render(<Example onConfirm={onConfirm} />)
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
     await userEvent.click(await screen.findByTestId('popconfirm-confirm'))
 
     expect(onConfirm).toHaveBeenCalled()
@@ -48,7 +82,7 @@ describe('Popconfirm', () => {
 
     render(<Example onCancel={onCancel} onConfirm={onConfirm} />)
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
     await userEvent.click(await screen.findByTestId('popconfirm-cancel'))
 
     expect(onConfirm).not.toHaveBeenCalled()
@@ -62,7 +96,7 @@ describe('Popconfirm', () => {
       />,
     )
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
     await userEvent.click(await screen.findByTestId('popconfirm-confirm'))
 
     expect(await screen.findByTestId('popconfirm-error')).toHaveTextContent(
@@ -82,7 +116,7 @@ describe('Popconfirm', () => {
       />,
     )
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
 
     expect(await screen.findByTestId('popconfirm-confirm')).toHaveTextContent(
       'Delete it',
@@ -104,20 +138,66 @@ describe('Popconfirm', () => {
       </Popconfirm>,
     )
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
 
     const field = await screen.findByTestId('confirm-typed-field')
 
-    expect(screen.getByTestId('popconfirm-confirm')).toBeDisabled()
+    expect(screen.getByTestId('popconfirm-confirm')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     expect(field).toHaveAttribute('placeholder', 'acme-prod')
 
     await userEvent.type(field, 'acme-prod')
 
     expect(screen.getByTestId('popconfirm-confirm')).toBeEnabled()
+    expect(screen.getByTestId('popconfirm-confirm')).not.toHaveAttribute(
+      'aria-disabled',
+    )
 
     await userEvent.click(screen.getByTestId('popconfirm-confirm'))
 
     expect(onConfirm).toHaveBeenCalledWith('acme-prod')
+  })
+
+  it('keeps a blocked confirm in keyboard reach, saying why, and inert', async () => {
+    const onConfirm = vi.fn()
+
+    render(
+      <Popconfirm
+        confirmationValue="acme-prod"
+        mode="typed"
+        onConfirm={onConfirm}
+        title="Delete this project?"
+      >
+        <Button>Delete</Button>
+      </Popconfirm>,
+    )
+
+    await userEvent.click(trigger())
+    const field = await screen.findByTestId('confirm-typed-field')
+    const action = screen.getByTestId('popconfirm-confirm')
+    const reason = 'Type acme-prod exactly to continue.'
+
+    // No wrapper takes the focus for it: the button itself is the stop.
+    expect(action).not.toHaveAttribute('disabled')
+    expect(action.parentElement).not.toHaveAttribute('tabindex')
+    expect(action).toHaveAccessibleDescription(reason)
+
+    field.focus()
+    await userEvent.tab()
+    expect(screen.getByTestId('popconfirm-cancel')).toHaveFocus()
+    await userEvent.tab()
+    expect(action).toHaveFocus()
+
+    await userEvent.keyboard('{Enter}')
+    await userEvent.click(action)
+    expect(onConfirm).not.toHaveBeenCalled()
+
+    await userEvent.type(field, 'acme-prod')
+    expect(
+      screen.getByTestId('popconfirm-confirm'),
+    ).not.toHaveAccessibleDescription()
   })
 
   it('places a placeholder on the password field', async () => {
@@ -127,7 +207,7 @@ describe('Popconfirm', () => {
       </Popconfirm>,
     )
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
 
     expect(await screen.findByTestId('confirm-password-field')).toHaveAttribute(
       'placeholder',
@@ -149,10 +229,13 @@ describe('Popconfirm', () => {
       </Popconfirm>,
     )
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
     await screen.findByTestId('popconfirm-challenge')
 
-    expect(screen.getByTestId('popconfirm-confirm')).toBeDisabled()
+    expect(screen.getByTestId('popconfirm-confirm')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
 
     await userEvent.click(
       screen.getByRole('checkbox', {
@@ -178,7 +261,7 @@ describe('Popconfirm', () => {
       </Popconfirm>,
     )
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
     await userEvent.type(
       await screen.findByTestId('confirm-typed-field'),
       'acme',
@@ -189,7 +272,7 @@ describe('Popconfirm', () => {
       expect(screen.queryByTestId('popconfirm')).not.toBeInTheDocument(),
     )
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
 
     expect(await screen.findByTestId('confirm-typed-field')).toHaveValue('')
   })
@@ -203,7 +286,7 @@ describe('Popconfirm', () => {
       />,
     )
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(trigger())
     await userEvent.click(await screen.findByTestId('popconfirm-confirm'))
 
     expect(await screen.findByTestId('popconfirm-error')).toHaveTextContent(
@@ -226,7 +309,7 @@ describe('Popconfirm', () => {
       />,
     )
 
-    await user.click(screen.getByTestId('popover-trigger'))
+    await user.click(trigger())
     await user.click(await screen.findByTestId('popconfirm-confirm'))
 
     // In flight: the button reports busy and the popover is still up.
@@ -246,7 +329,7 @@ describe('Popconfirm', () => {
 
     render(<Example onConfirm={onConfirm} />)
 
-    await user.click(screen.getByTestId('popover-trigger'))
+    await user.click(trigger())
 
     const confirm = await screen.findByTestId('popconfirm-confirm')
 

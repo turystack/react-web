@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { tv } from 'tailwind-variants'
 
 import { Button } from '@/components/button'
+import { ComposedButton } from '@/components/button/button.composed'
 import { useLabels } from '@/components/labels-provider'
 import { usePortalContainer } from '@/components/portal-provider'
 
@@ -13,16 +14,11 @@ import type { ConfirmProps } from './confirm.types'
 const confirm = tv({
   slots: {
     backdrop: [
-      'confirm-backdrop fixed inset-0 isolate z-50 bg-black/50',
+      'confirm-backdrop fixed inset-0 isolate z-50 bg-overlay backdrop-blur-overlay',
       'data-open:fade-in-0 duration-100 data-open:animate-in',
       'data-closed:fade-out-0 data-closed:animate-out',
     ],
     content: 'confirm-content text-sm',
-    blocked: [
-      'confirm-blocked flex rounded-lg outline-none',
-      '[&>button]:w-full',
-      'focus-visible:ring-3 focus-visible:ring-ring/50',
-    ],
     challenge: 'confirm-challenge flex flex-col gap-2',
     description: 'confirm-description text-muted-foreground text-sm',
     error: 'confirm-error text-destructive text-sm',
@@ -42,7 +38,6 @@ const confirm = tv({
 
 const {
   backdrop,
-  blocked,
   challenge,
   content: contentSlot,
   description,
@@ -167,17 +162,20 @@ function Confirm(props: ConfirmProps) {
     onClose?.()
   }
 
-  const confirmAction = (
-    <Button
-      data-testid="confirm-action"
-      {...confirmProps}
-      disabled={confirmProps?.disabled || Boolean(blockedReason)}
-      loading={confirmLoading}
-      onClick={handleConfirm}
-    >
-      {confirmText ?? labels.confirm.confirm}
-    </Button>
-  )
+  /**
+   * A blocked action stays in the tab order, disabled through aria-disabled
+   * rather than the native attribute (Base UI's `focusableWhenDisabled`), and
+   * describes itself with the reason — so the keyboard lands on the button
+   * itself and hears why it will not act, instead of on a wrapper around a
+   * dead one. Only while blocked: a caller's own `disabled` and the loading
+   * state still take the button out of the tab order.
+   */
+  const blockedProps = blockedReason
+    ? {
+        'aria-describedby': hintId,
+        focusableWhenDisabled: true,
+      }
+    : {}
 
   return (
     <AlertDialog.Root onOpenChange={handleOpenChange} open={open}>
@@ -236,19 +234,16 @@ function Confirm(props: ConfirmProps) {
             >
               {cancelText ?? labels.confirm.cancel}
             </AlertDialog.Close>
-            {blockedReason ? (
-              <span
-                aria-describedby={hintId}
-                className={blocked()}
-                data-testid="confirm-blocked"
-                // biome-ignore lint/a11y/noNoninteractiveTabindex: a disabled button takes no focus, so this wrapper is the only place a reader can land to hear why it is blocked
-                tabIndex={0}
-              >
-                {confirmAction}
-              </span>
-            ) : (
-              confirmAction
-            )}
+            <ComposedButton
+              data-testid="confirm-action"
+              {...confirmProps}
+              {...blockedProps}
+              disabled={confirmProps?.disabled || Boolean(blockedReason)}
+              loading={confirmLoading}
+              onClick={handleConfirm}
+            >
+              {confirmText ?? labels.confirm.confirm}
+            </ComposedButton>
           </div>
         </AlertDialog.Popup>
       </AlertDialog.Portal>

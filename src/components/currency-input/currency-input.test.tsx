@@ -169,7 +169,7 @@ describe('CurrencyInput', () => {
   })
 
   it('carries the native input attributes it is given', () => {
-    render(<CurrencyInput aria-invalid aria-label="Price" name="price" />)
+    render(<CurrencyInput aria-invalid ariaLabel="Price" name="price" />)
 
     const field = screen.getByRole('textbox', { name: 'Price' })
     expect(field).toHaveAttribute('name', 'price')
@@ -557,5 +557,221 @@ describe('CurrencyInput labels', () => {
 
     expect(screen.getByPlaceholderText('De')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Até')).toBeInTheDocument()
+  })
+})
+
+describe('CurrencyInput data-testid', () => {
+  it('uses the testing handle the consumer gave the single field', () => {
+    render(<CurrencyInput ariaLabel="Price" data-testid="price-field" />)
+
+    expect(screen.getByTestId('price-field')).toBe(
+      screen.getByRole('textbox', { name: 'Price' }),
+    )
+    expect(screen.queryByTestId('currency-input-field')).not.toBeInTheDocument()
+  })
+
+  it('keeps its own handle when none is given', () => {
+    render(<CurrencyInput ariaLabel="Price" />)
+
+    expect(screen.getByTestId('currency-input-field')).toBe(
+      screen.getByRole('textbox', { name: 'Price' }),
+    )
+  })
+})
+
+const INTERACTIVE =
+  'button, input, select, textarea, a[href], [role="button"], [tabindex]'
+
+describe('CurrencyInput range structure', () => {
+  it('nests no interactive element inside another', () => {
+    const { container } = render(
+      <CurrencyInput defaultValue={{ from: 1000 }} mode="range" />,
+    )
+
+    const controls = [...container.querySelectorAll(INTERACTIVE)]
+    expect(controls.length).toBeGreaterThanOrEqual(3)
+    for (const control of controls) {
+      expect(control.parentElement?.closest(INTERACTIVE)).toBeNull()
+    }
+  })
+
+  it('has no role="button" wrapper around the field', () => {
+    render(<CurrencyInput mode="range" />)
+
+    expect(
+      screen.getByPlaceholderText('Filter by value').closest('[role="button"]'),
+    ).toBeNull()
+  })
+
+  it('makes the currency symbol the button that opens the bounds', async () => {
+    render(<CurrencyInput mode="range" variant="usd" />)
+
+    const openButton = screen.getByRole('button', { name: 'Set value range' })
+    const clear = screen.getByRole('button', { name: 'Clear' })
+    const field = screen.getByPlaceholderText('Filter by value')
+
+    expect(openButton.tagName).toBe('BUTTON')
+    expect(openButton).toHaveAttribute('type', 'button')
+    expect(openButton).toHaveTextContent('$')
+    expect(openButton.contains(field)).toBe(false)
+    expect(clear.contains(field)).toBe(false)
+    expect(openButton).toHaveAttribute('aria-expanded', 'false')
+
+    await userEvent.click(openButton)
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    expect(openButton).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('disables the open button with the field', () => {
+    render(<CurrencyInput disabled mode="range" />)
+
+    expect(
+      screen.getByRole('button', { name: 'Set value range' }),
+    ).toBeDisabled()
+  })
+
+  it('rings the field while the bounds are on screen', async () => {
+    render(<CurrencyInput mode="range" />)
+
+    const field = screen.getByPlaceholderText('Filter by value')
+    expect(field).not.toHaveClass('ring-3')
+
+    await openRange()
+
+    expect(field).toHaveClass('ring-3')
+  })
+
+  it('calls the click handler it was handed and still opens', async () => {
+    const onClick = vi.fn()
+    render(<CurrencyInput mode="range" onClick={onClick} />)
+
+    await openRange()
+
+    expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('takes the open button name from the labels the app provides', () => {
+    render(
+      <TuryProvider
+        labels={{ currencyInput: { open: 'Definir faixa de valores' } }}
+      >
+        <CurrencyInput mode="range" />
+      </TuryProvider>,
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Definir faixa de valores' }),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('CurrencyInput range keyboard', () => {
+  it('reaches the open button, the field and the clear button in order', async () => {
+    render(<CurrencyInput defaultValue={{ from: 1000 }} mode="range" />)
+
+    await userEvent.tab()
+    expect(
+      screen.getByRole('button', { name: 'Set value range' }),
+    ).toHaveFocus()
+
+    await userEvent.tab()
+    expect(screen.getByPlaceholderText('Filter by value')).toHaveFocus()
+
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'Clear' })).toHaveFocus()
+  })
+
+  it.each([
+    ['Enter', '{Enter}'],
+    ['Space', ' '],
+  ])('opens the bounds with %s on the open button', async (_key, keys) => {
+    render(<CurrencyInput mode="range" />)
+
+    await userEvent.tab()
+    await userEvent.keyboard(keys)
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('clears with Enter on the clear button without opening the bounds', async () => {
+    const onChange = vi.fn()
+    render(
+      <CurrencyInput
+        defaultValue={{ from: 1000 }}
+        mode="range"
+        onChange={onChange}
+      />,
+    )
+
+    screen.getByRole('button', { name: 'Clear' }).focus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(onChange).toHaveBeenCalledWith(null)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+describe('CurrencyInput range sections', () => {
+  it('refuses a consumer section in range mode: both sides are its own buttons', () => {
+    render(
+      <CurrencyInput
+        // @ts-expect-error the left side is the symbol that opens the bounds
+        leftSection={<span>left</span>}
+        mode="range"
+        rightSection={<span>right</span>}
+      />,
+    )
+
+    // Even forced past the type, the field keeps its own two buttons.
+    expect(
+      screen.getByRole('button', { name: 'Set value range' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
+    expect(screen.queryByText('left')).not.toBeInTheDocument()
+    expect(screen.queryByText('right')).not.toBeInTheDocument()
+  })
+
+  it('refuses a right section alone in range mode', () => {
+    render(
+      // @ts-expect-error no rightSection in the range contract
+      <CurrencyInput mode="range" rightSection={<span>right</span>} />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
+    expect(screen.queryByText('right')).not.toBeInTheDocument()
+  })
+
+  it('still lets the two button slots be sized in range mode', () => {
+    render(
+      <CurrencyInput
+        leftSectionWidth={56}
+        mode="range"
+        rightSectionWidth={64}
+      />,
+    )
+
+    expect(screen.getByRole('textbox')).toHaveStyle({
+      paddingLeft: '56px',
+      paddingRight: '64px',
+    })
+  })
+})
+
+describe('CurrencyInput axes', () => {
+  it('publishes its default variant and size for a theme to select', () => {
+    render(<CurrencyInput />)
+
+    const root = screen.getByTestId('currency-input-root')
+    expect(root).toHaveAttribute('data-variant', 'brl')
+    expect(root).toHaveAttribute('data-size', 'md')
+  })
+
+  it('publishes the variant and size it was given', () => {
+    render(<CurrencyInput size="lg" variant="usd" />)
+
+    const root = screen.getByTestId('currency-input-root')
+    expect(root).toHaveAttribute('data-variant', 'usd')
+    expect(root).toHaveAttribute('data-size', 'lg')
   })
 })

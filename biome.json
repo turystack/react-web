@@ -1,8 +1,24 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.4/schema.json",
   "files": {
-    "includes": ["**/src/**/*", "**/vite.config.ts", "!**/*.css", "!**/src/shadcn"]
+    "includes": [
+      "**/src/**/*",
+      "**/vite.config.ts",
+      "!**/*.css",
+      "!**/src/shadcn"
+    ]
   },
+  "plugins": [
+    {
+      "includes": [
+        "**/src/components/**/*.types.ts",
+        "!**/src/components/button/button.types.ts",
+        "!**/src/components/calendar/**",
+        "!**/src/shadcn/**"
+      ],
+      "path": "./plugins/no-classname-type-member.grit"
+    }
+  ],
   "formatter": {
     "enabled": true,
     "indentStyle": "space",

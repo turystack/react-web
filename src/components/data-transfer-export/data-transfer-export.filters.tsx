@@ -43,6 +43,24 @@ export function DataTransferFilterField({
     )
   }
 
+  // A list filtered by several statuses hands all of them over. With only a
+  // single select here, a page showing "paid or shipped" opened an export that
+  // could hold one of the two — a wider or narrower file than the reader saw.
+  if (filter.type === 'multiSelect') {
+    return (
+      <Select
+        mode="multiple"
+        onChange={onChange}
+        optionLabel="label"
+        optionValue="value"
+        options={filter.options ?? []}
+        placeholder={filter.placeholder}
+        size="sm"
+        value={(value as string[] | null) ?? []}
+      />
+    )
+  }
+
   if (filter.type === 'boolean') {
     return (
       <Select

@@ -1,11 +1,19 @@
 import { IMaskInput } from 'react-imask'
 
+import { useFormFieldControl } from '@/components/form/form.context'
 import { Loader } from '@/components/loader'
+import { axes } from '@/support/utils'
 
 import { DEFAULT_SECTION_WIDTH, inputShared } from '../input/input.shared'
+import type { MaskInputComposition } from './mask-input.composed'
 import type { MaskInputProps } from './mask-input.types'
 
-function MaskInput({
+/**
+ * The implementation reads the public contract plus `MaskInputComposition`;
+ * the exported `MaskInput` is narrowed back to `MaskInputProps`, so only this
+ * package's composers (through `ComposedMaskInput`) reach the internal prop.
+ */
+function MaskInputImpl({
   mask,
   size,
   variant,
@@ -17,11 +25,21 @@ function MaskInput({
   rightSection,
   rightSectionWidth = DEFAULT_SECTION_WIDTH,
   loading,
-  rootClassName,
-  className,
+  ariaLabel,
+  fieldClass,
   onChange,
+  'data-testid': testId = 'mask-input-field',
+  id: explicitId,
+  'aria-describedby': explicitDescribedBy,
+  'aria-invalid': explicitInvalid,
   ...props
-}: MaskInputProps) {
+}: MaskInputProps & MaskInputComposition) {
+  // Form.Field's id, description/error ids and error state, unless given.
+  const control = useFormFieldControl({
+    describedBy: explicitDescribedBy,
+    id: explicitId,
+    invalid: explicitInvalid,
+  })
   const effectiveRight = loading ? <Loader size="sm" /> : rightSection
   const hasLeft = Boolean(leftSection)
   const hasRight = Boolean(effectiveRight)
@@ -53,8 +71,10 @@ function MaskInput({
 
   return (
     <div
-      className={root({
-        className: rootClassName,
+      className={root()}
+      {...axes(inputShared, {
+        size,
+        variant,
       })}
       data-testid="mask-input-root"
     >
@@ -74,11 +94,15 @@ function MaskInput({
       <IMaskInput
         {...(props as object)}
         aria-busy={loading || undefined}
+        aria-describedby={control.describedBy}
+        aria-invalid={control.invalid}
+        aria-label={ariaLabel}
         className={field({
-          className,
+          className: fieldClass,
         })}
-        data-testid="mask-input-field"
+        data-testid={testId}
         disabled={disabled || loading}
+        id={control.id}
         mask={maskOptions as string}
         onAccept={(val: string) => onChange?.(val === '' ? null : val)}
         style={{
@@ -111,5 +135,7 @@ function MaskInput({
     </div>
   )
 }
+
+const MaskInput = MaskInputImpl as (props: MaskInputProps) => React.JSX.Element
 
 export { MaskInput }

@@ -5,6 +5,7 @@ import { Button } from '@/components/button'
 import { usePortalContainer } from '@/components/portal-provider'
 import { X } from '@/internal/icons'
 
+import type { SheetComposition } from './sheet.shared'
 import type {
   SheetBodyProps,
   SheetFooterProps,
@@ -95,7 +96,7 @@ const styles = tv({
   },
   slots: {
     backdrop: [
-      'sheet-backdrop fixed inset-0 z-50 bg-black/50',
+      'sheet-backdrop fixed inset-0 z-50 bg-overlay backdrop-blur-overlay',
       'transition-opacity duration-200 ease-in-out',
       'data-ending-style:opacity-0 data-starting-style:opacity-0',
     ],
@@ -158,6 +159,14 @@ const styles = tv({
       sm: {},
       xl: {},
     },
+    // A reading surface (an inbox) on a phone: three quarters of 390px leaves
+    // its rows a column of two-word lines, so it takes the whole width there.
+    fillOnPhone: {
+      false: {},
+      true: {
+        popup: 'max-sm:w-full',
+      },
+    },
     variant: {
       default: {},
       floating: {
@@ -167,18 +176,27 @@ const styles = tv({
   },
 })
 
-function SheetRoot({
-  open,
-  side = 'right',
-  size,
-  variant = 'default',
-  modal = true,
-  dismissible = true,
-  onChange,
-  children,
-}: PropsWithChildren<SheetProps>) {
+/**
+ * Reads the public contract plus `SheetComposition`; the exported type stays
+ * `SheetProps`, so only this package's own composers (through `ComposedSheet`)
+ * can say where focus returns.
+ */
+function SheetRoot(props: PropsWithChildren<SheetProps>) {
+  const {
+    open,
+    side = 'right',
+    size,
+    variant = 'default',
+    modal = true,
+    dismissible = true,
+    onChange,
+    children,
+    finalFocus,
+    fillOnPhone = false,
+  } = props as PropsWithChildren<SheetProps> & SheetComposition
   const portalContainer = usePortalContainer()
   const { backdrop, popup } = styles({
+    fillOnPhone,
     side,
     size,
     variant,
@@ -213,8 +231,10 @@ function SheetRoot({
         <Dialog.Popup
           className={popup()}
           data-side={side}
+          data-size={size}
           data-testid="sheet-popup"
           data-variant={variant}
+          finalFocus={finalFocus}
           onClick={handleOverlayClick}
         >
           {children}

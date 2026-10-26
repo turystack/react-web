@@ -1,6 +1,7 @@
 import { tv } from 'tailwind-variants'
 import { useLabels } from '@/components/labels-provider'
 import { Loader2 } from '@/internal/icons'
+import { axes } from '@/support/utils'
 
 import type { LoaderProps } from './loader.types'
 
@@ -35,17 +36,20 @@ function Loader({ decorative, label, size }: LoaderProps) {
   const { icon, root } = loader({
     size,
   })
+  const published = axes(loader, {
+    size,
+  })
 
   if (decorative) {
     return (
-      <span aria-hidden className={root()} data-testid="loader">
+      <span aria-hidden className={root()} {...published} data-testid="loader">
         <Loader2 className={icon()} />
       </span>
     )
   }
 
   return (
-    <span className={root()} data-testid="loader" role="status">
+    <span className={root()} {...published} data-testid="loader" role="status">
       <Loader2 className={icon()} />
       <span className="loader-label sr-only">
         {label ?? labels.loader.loading}

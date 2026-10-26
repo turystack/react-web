@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ColorSchemeProvider } from '@/components/color-scheme-provider'
+import { LabelsProvider } from '@/components/labels-provider'
 
 import { ColorSchemeSwitcher } from './color-scheme-switcher'
 
@@ -31,6 +32,30 @@ function checked() {
 }
 
 describe('ColorSchemeSwitcher', () => {
+  it('takes the group and option names from the labels provider', () => {
+    renderSwitcher(
+      <LabelsProvider
+        labels={{
+          colorSchemeSwitcher: {
+            dark: 'Escuro',
+            label: 'Esquema de cores',
+            light: 'Claro',
+            system: 'Sistema',
+          },
+        }}
+      >
+        <ColorSchemeSwitcher />
+      </LabelsProvider>,
+    )
+
+    expect(
+      screen.getByRole('radiogroup', { name: 'Esquema de cores' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Claro' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Escuro' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Sistema' })).toBeInTheDocument()
+  })
+
   it('offers one radio per scheme inside a named radiogroup', () => {
     renderSwitcher(<ColorSchemeSwitcher />)
 
@@ -98,3 +123,23 @@ describe.each(['sm', 'md', 'lg'] as const)(
     })
   },
 )
+
+describe('ColorSchemeSwitcher axes', () => {
+  it('publishes its default size for a theme to select', () => {
+    renderSwitcher(<ColorSchemeSwitcher />)
+
+    expect(screen.getByTestId('color-scheme-switcher')).toHaveAttribute(
+      'data-size',
+      'md',
+    )
+  })
+
+  it('publishes the size it was given', () => {
+    renderSwitcher(<ColorSchemeSwitcher size="sm" />)
+
+    expect(screen.getByTestId('color-scheme-switcher')).toHaveAttribute(
+      'data-size',
+      'sm',
+    )
+  })
+})

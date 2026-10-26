@@ -254,3 +254,99 @@ describe.each(['sm', 'md', 'lg'] as const)('DocumentInput size %s', (size) => {
     })
   })
 })
+
+describe('DocumentInput contract', () => {
+  it('is named by ariaLabel in both the fixed and the any variant', () => {
+    const { rerender } = render(
+      <DocumentInput ariaLabel="Document" name="doc" variant="cpf" />,
+    )
+    expect(screen.getByRole('textbox', { name: 'Document' })).toHaveAttribute(
+      'name',
+      'doc',
+    )
+
+    rerender(<DocumentInput ariaLabel="Document" name="doc" variant="any" />)
+    expect(screen.getByRole('textbox', { name: 'Document' })).toHaveClass(
+      'document-input-field',
+    )
+  })
+
+  it('never lets a class from outside restyle the field or its root', () => {
+    const { container } = render(
+      <DocumentInput
+        // @ts-expect-error — className is not part of the contract
+        className="outside-class"
+        variant="any"
+      />,
+    )
+
+    expect(container.querySelector('.outside-class')).toBeNull()
+  })
+})
+
+describe.each(['cpf', 'cnpj', 'any'] as const)(
+  'DocumentInput data-testid, variant %s',
+  (variant) => {
+    it('uses the testing handle the consumer gave the field', () => {
+      render(
+        <DocumentInput
+          ariaLabel="Document"
+          data-testid="customer-document"
+          variant={variant}
+        />,
+      )
+
+      expect(screen.getByTestId('customer-document')).toBe(
+        screen.getByRole('textbox', { name: 'Document' }),
+      )
+    })
+
+    it('keeps the mask field handle when none is given', () => {
+      render(<DocumentInput ariaLabel="Document" variant={variant} />)
+
+      expect(screen.getByTestId('mask-input-field')).toBe(
+        screen.getByRole('textbox', { name: 'Document' }),
+      )
+    })
+  },
+)
+
+describe('DocumentInput axes', () => {
+  it.each(['cpf', 'cnpj', 'any'] as const)(
+    'publishes its axes on the outermost root, variant %s',
+    (variant) => {
+      const { container } = render(<DocumentInput variant={variant} />)
+      const root = container.firstElementChild
+
+      expect(root).toHaveClass('document-input-root')
+      expect(root).toHaveAttribute('data-size', 'md')
+      expect(root).toHaveAttribute('data-variant', variant)
+    },
+  )
+
+  it.each(['cpf', 'cnpj', 'any'] as const)(
+    'publishes an explicit size on the outermost root, variant %s',
+    (variant) => {
+      const { container } = render(
+        <DocumentInput size="lg" variant={variant} />,
+      )
+
+      expect(container.firstElementChild).toHaveAttribute('data-size', 'lg')
+    },
+  )
+
+  it('keeps the field look on the MaskInput root inside a masked value', () => {
+    const { container } = render(
+      <DocumentInput
+        value={{ number: '12345678901', type: 'cpf' }}
+        variant="cpf"
+      />,
+    )
+    const root = container.firstElementChild
+    const field = root?.querySelector('.input-root')
+
+    expect(root).toHaveAttribute('data-variant', 'cpf')
+    expect(field).toHaveAttribute('data-variant', 'default')
+    expect(field).toHaveAttribute('data-size', 'md')
+  })
+})

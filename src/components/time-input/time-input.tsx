@@ -3,16 +3,20 @@ import {
   type ClipboardEvent,
   type FocusEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type Ref,
   useEffect,
   useRef,
   useState,
 } from 'react'
+import { useFormFieldControl } from '@/components/form/form.context'
+import { useLabels } from '@/components/labels-provider'
 import { Loader } from '@/components/loader'
 import { Clock } from '@/internal/icons'
-import { cn } from '@/support/utils'
+import { axes, cn } from '@/support/utils'
 
 import { DEFAULT_SECTION_WIDTH, inputShared } from '../input/input.shared'
+import type { TimeInputComposition } from './time-input.composed'
 import type { TimeInputProps } from './time-input.types'
 import {
   clampTime,
@@ -167,7 +171,12 @@ function SpinSegment({
   )
 }
 
-function TimeInput({
+/**
+ * The implementation reads the public contract plus `TimeInputComposition`;
+ * the exported `TimeInput` is narrowed back to `TimeInputProps`, so only this
+ * package's composers (through `ComposedTimeInput`) reach the internal prop.
+ */
+function TimeInputImpl({
   size,
   variant,
   value,
@@ -177,8 +186,8 @@ function TimeInput({
   rightSection,
   rightSectionWidth = DEFAULT_SECTION_WIDTH,
   loading,
-  rootClassName,
-  className,
+  ariaLabel,
+  fieldClass,
   onChange,
   withSeconds = false,
   minTime,
@@ -187,8 +196,25 @@ function TimeInput({
   readOnly,
   onFocus,
   onBlur,
+  onKeyDown,
+  onClick,
+  'data-testid': testId = 'time-input-field',
+  'aria-describedby': explicitDescribedBy,
+  'aria-invalid': explicitInvalid,
   ...props
-}: TimeInputProps) {
+}: TimeInputProps & TimeInputComposition) {
+  const labels = useLabels()
+  // A group of segments is not labelable: Form.Field names it through
+  // aria-labelledby, and hands it its description/error ids and error state.
+  const control = useFormFieldControl(
+    {
+      describedBy: explicitDescribedBy,
+      invalid: explicitInvalid,
+    },
+    {
+      labelable: false,
+    },
+  )
   const isControlled = value !== undefined
   const initial = parseTime(value ?? defaultValue ?? null, withSeconds)
   const [hh, setHh] = useState<number | null>(initial.hh)
@@ -263,7 +289,7 @@ function TimeInput({
     }
   }
 
-  function handleGroupFocus(e: FocusEvent<HTMLDivElement>) {
+  function handleGroupFocus(e: FocusEvent<HTMLFieldSetElement>) {
     if (containsFocus.current) {
       return
     }
@@ -271,7 +297,7 @@ function TimeInput({
     onFocus?.(e as unknown as FocusEvent<HTMLInputElement>)
   }
 
-  function handleGroupBlur(e: FocusEvent<HTMLDivElement>) {
+  function handleGroupBlur(e: FocusEvent<HTMLFieldSetElement>) {
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
       return
     }
@@ -304,7 +330,7 @@ function TimeInput({
     onBlur?.(e as unknown as FocusEvent<HTMLInputElement>)
   }
 
-  function handlePaste(e: ClipboardEvent<HTMLDivElement>) {
+  function handlePaste(e: ClipboardEvent<HTMLFieldSetElement>) {
     if (readOnly || disabled) {
       return
     }
@@ -343,7 +369,9 @@ function TimeInput({
   // focus-visible ring from any child <input> to the wrapper border.
   const wrapperClass = cn(
     field({}),
-    'flex cursor-text items-center gap-0',
+    // The wrapper is a <fieldset>: min-w-0 lifts its min-content floor, m-0
+    // its margin; the field styles above already set its border and padding.
+    'm-0 flex min-w-0 cursor-text items-center gap-0',
     variant === 'ghost'
       ? 'has-[input:focus-visible]:border-transparent has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50'
       : 'has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50',
@@ -351,7 +379,7 @@ function TimeInput({
       (variant === 'ghost'
         ? 'pointer-events-none cursor-not-allowed bg-transparent opacity-50 dark:bg-transparent'
         : 'pointer-events-none cursor-not-allowed bg-input/50 opacity-50 dark:bg-input/80'),
-    className,
+    fieldClass,
   )
 
   // The focused segment fills with primary color so the `--` placeholder
@@ -372,8 +400,10 @@ function TimeInput({
 
   return (
     <div
-      className={root({
-        className: rootClassName,
+      className={root()}
+      {...axes(inputShared, {
+        size,
+        variant,
       })}
       data-testid="time-input-root"
     >
@@ -390,12 +420,31 @@ function TimeInput({
           {effectiveLeft}
         </span>
       )}
-      <div
-        {...(props as object)}
+      {/* The segments are one field drawn as one box: a <fieldset>, the native
+          group, named by ariaLabel or the Form.Field label (no legend). */}
+      <fieldset
+        {...props}
+        aria-describedby={control.describedBy}
+        aria-invalid={control.invalid}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabel ? undefined : control.labelledBy}
         className={wrapperClass}
-        data-testid="time-input-field"
+        data-testid={testId}
         onBlur={handleGroupBlur}
+        // The contract types these as a field's events (InputProps); here the
+        // field is the group, so the group's event is what they receive, the
+        // way onFocus/onBlur already are.
+        onClick={
+          onClick &&
+          ((e: MouseEvent<HTMLFieldSetElement>) =>
+            onClick(e as unknown as MouseEvent<HTMLInputElement>))
+        }
         onFocus={handleGroupFocus}
+        onKeyDown={
+          onKeyDown &&
+          ((e: KeyboardEvent<HTMLFieldSetElement>) =>
+            onKeyDown(e as unknown as KeyboardEvent<HTMLInputElement>))
+        }
         onPaste={handlePaste}
         style={{
           ...(hasLeft
@@ -411,7 +460,7 @@ function TimeInput({
         }}
       >
         <SpinSegment
-          ariaLabel="hours"
+          ariaLabel={labels.timeInput.hours}
           className={segmentClass}
           disabled={disabled}
           max={HH_MAX}
@@ -426,7 +475,7 @@ function TimeInput({
           :
         </span>
         <SpinSegment
-          ariaLabel="minutes"
+          ariaLabel={labels.timeInput.minutes}
           className={segmentClass}
           disabled={disabled}
           max={MM_MAX}
@@ -445,7 +494,7 @@ function TimeInput({
               :
             </span>
             <SpinSegment
-              ariaLabel="seconds"
+              ariaLabel={labels.timeInput.seconds}
               className={segmentClass}
               disabled={disabled}
               max={SS_MAX}
@@ -459,7 +508,7 @@ function TimeInput({
             />
           </>
         )}
-      </div>
+      </fieldset>
       {hasRight && (
         <span
           className={section({
@@ -476,5 +525,7 @@ function TimeInput({
     </div>
   )
 }
+
+const TimeInput = TimeInputImpl as (props: TimeInputProps) => React.JSX.Element
 
 export { TimeInput }

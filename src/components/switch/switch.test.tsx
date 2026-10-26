@@ -183,12 +183,12 @@ describe('Switch', () => {
     }
   })
 
-  it('carries the label styling hook it was handed', () => {
-    render(<Switch label={{ className: 'uppercase', content: 'Dark mode' }} />)
+  it('paints its label as a switch part, keeping the Label slot', () => {
+    render(<Switch label={{ content: 'Dark mode', required: true }} />)
 
-    expect(screen.getByText('Dark mode').closest('label')).toHaveClass(
-      'uppercase',
-    )
+    const label = screen.getByText('Dark mode').closest('label')
+    expect(label).toHaveClass('switch-label', 'label-root')
+    expect(label?.textContent).toContain('*')
   })
 
   it('blocks the toggle when disabled', async () => {
@@ -244,5 +244,19 @@ describe.each(['sm', 'md', 'lg'] as const)('Switch size %s', (size) => {
     await userEvent.click(screen.getByRole('switch', { name: 'Dark mode' }))
 
     expect(onCheckedChange).toHaveBeenCalledWith(true)
+  })
+})
+
+describe('Switch axes', () => {
+  it('publishes its default size for a theme to select', () => {
+    render(<Switch label="Dark mode" />)
+
+    expect(screen.getByTestId('switch-root')).toHaveAttribute('data-size', 'md')
+  })
+
+  it('publishes the size it was given', () => {
+    render(<Switch label="Dark mode" size="lg" />)
+
+    expect(screen.getByTestId('switch-root')).toHaveAttribute('data-size', 'lg')
   })
 })

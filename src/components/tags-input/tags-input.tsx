@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react'
 import { tv } from 'tailwind-variants'
 import { Badge } from '@/components/badge'
+import { useFormFieldControl } from '@/components/form/form.context'
 import { Loader } from '@/components/loader'
 import { X } from '@/internal/icons'
+import { axes } from '@/support/utils'
 
 import { DEFAULT_SECTION_WIDTH } from '../input/input.shared'
 import type { TagsInputProps } from './tags-input.types'
@@ -54,6 +56,7 @@ function TagsInput({
   allowDuplicates = false,
   onChange,
   onReject,
+  onKeyDown,
   placeholder,
   disabled,
   loading,
@@ -61,12 +64,21 @@ function TagsInput({
   leftSectionWidth = DEFAULT_SECTION_WIDTH,
   rightSection,
   rightSectionWidth = DEFAULT_SECTION_WIDTH,
-  rootClassName,
-  className,
+  ariaLabel,
   size,
   variant,
+  'data-testid': testId = 'tags-input-field',
+  id: explicitId,
+  'aria-describedby': explicitDescribedBy,
+  'aria-invalid': explicitInvalid,
   ...props
 }: TagsInputProps) {
+  // Form.Field's id, description/error ids and error state, unless given.
+  const control = useFormFieldControl({
+    describedBy: explicitDescribedBy,
+    id: explicitId,
+    invalid: explicitInvalid,
+  })
   const [internalValue, setInternalValue] = useState<string[]>(defaultValue)
   const isControlled = controlledValue !== undefined
   const tags = isControlled ? controlledValue : internalValue
@@ -109,6 +121,7 @@ function TagsInput({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    onKeyDown?.(e)
     if (e.key === 'Enter') {
       e.preventDefault()
       // A refused entry keeps its text so the person typing sees that nothing
@@ -127,8 +140,10 @@ function TagsInput({
 
   return (
     <div
-      className={root({
-        className: rootClassName,
+      className={root()}
+      {...axes(tagsInput, {
+        size,
+        variant,
       })}
       data-testid="tags-input-root"
       onClick={() => {
@@ -164,11 +179,13 @@ function TagsInput({
       <input
         {...props}
         aria-busy={loading || undefined}
-        className={field({
-          className,
-        })}
-        data-testid="tags-input-field"
+        aria-describedby={control.describedBy}
+        aria-invalid={control.invalid}
+        aria-label={ariaLabel}
+        className={field()}
+        data-testid={testId}
         disabled={disabled || loading}
+        id={control.id}
         onKeyDown={handleKeyDown}
         placeholder={tags.length === 0 ? placeholder : undefined}
         ref={inputRef}

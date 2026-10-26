@@ -8,7 +8,7 @@ import {
 import { tv } from 'tailwind-variants'
 import { Loader2 } from '@/internal/icons'
 
-import { cn } from '@/support/utils'
+import { axes, cn } from '@/support/utils'
 
 import type { BadgeProps } from './badge.types'
 
@@ -74,31 +74,41 @@ const badge = tv({
       },
       sm: {
         content: 'gap-0.5',
-        root: 'h-4 gap-0.5 px-1.5 text-[0.625rem] [&>svg]:size-2.5',
+        root: 'h-4 gap-0.5 px-1.5 text-2xs [&>svg]:size-2.5',
         spinner: 'size-2.5',
       },
     },
+    /**
+     * The status variants paint with the theme's status tokens, never a raw
+     * palette. The soft ones tint only 5% in light mode because the tokens are
+     * tuned to hold AA as text on the page: a heavier tint pulls the label
+     * under 4.5:1, so the shape comes from a 25% border instead. Dark mode has
+     * the headroom for a 15% tint. `solid-destructive` writes in the
+     * background colour — white in light mode, near-black in dark — because
+     * the theme has no destructive-foreground utility and white on the dark
+     * theme's lighter red falls under AA.
+     */
     variant: {
       default: {
         root: 'bg-primary text-primary-foreground',
       },
       destructive: {
-        root: 'bg-destructive/10 text-destructive',
+        root: 'border-destructive/25 bg-destructive/5 text-destructive dark:bg-destructive/15',
       },
       info: {
-        root: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+        root: 'border-info/25 bg-info/5 text-info dark:bg-info/15',
       },
       orange: {
-        root: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+        root: 'bg-category-orange text-category-orange-foreground',
       },
       outline: {
         root: 'border-border text-foreground',
       },
       pink: {
-        root: 'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300',
+        root: 'bg-category-pink text-category-pink-foreground',
       },
       purple: {
-        root: 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300',
+        root: 'bg-category-purple text-category-purple-foreground',
       },
       secondary: {
         root: 'bg-secondary text-secondary-foreground',
@@ -107,22 +117,22 @@ const badge = tv({
         root: 'bg-foreground text-background',
       },
       'solid-destructive': {
-        root: 'bg-red-600 text-white dark:bg-red-500',
+        root: 'bg-destructive text-background',
       },
       'solid-info': {
-        root: 'bg-sky-600 text-white dark:bg-sky-500',
+        root: 'bg-info text-info-foreground',
       },
       'solid-success': {
-        root: 'bg-emerald-600 text-white dark:bg-emerald-500',
+        root: 'bg-success text-success-foreground',
       },
       success: {
-        root: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+        root: 'border-success/25 bg-success/5 text-success dark:bg-success/15',
       },
       teal: {
-        root: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
+        root: 'bg-category-teal text-category-teal-foreground',
       },
       warning: {
-        root: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+        root: 'border-warning/25 bg-warning/5 text-warning dark:bg-warning/15',
       },
     },
   },
@@ -172,8 +182,11 @@ function Badge({
         'aria-busy': loading,
         'aria-disabled': loading || undefined,
         className: cn(root(), child.props.className as string | undefined),
-        'data-size': size,
         'data-testid': 'badge',
+        ...axes(badge, {
+          size,
+          variant,
+        }),
         ...(clickable
           ? {
               onClick: loading ? undefined : onClick,
@@ -189,9 +202,12 @@ function Badge({
       <button
         aria-busy={loading}
         className={root()}
-        data-size={size}
         data-testid="badge"
         disabled={loading}
+        {...axes(badge, {
+          size,
+          variant,
+        })}
         onClick={onClick}
         type="button"
       >
@@ -204,8 +220,11 @@ function Badge({
     <span
       aria-busy={loading}
       className={root()}
-      data-size={size}
       data-testid="badge"
+      {...axes(badge, {
+        size,
+        variant,
+      })}
     >
       {inner}
     </span>

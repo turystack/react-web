@@ -62,3 +62,23 @@ describe.each(['sm', 'md', 'lg'] as const)('Loader size %s', (size) => {
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
 })
+
+describe('Loader axes', () => {
+  it('publishes its default size for a theme to select', () => {
+    render(<Loader />)
+
+    expect(screen.getByTestId('loader')).toHaveAttribute('data-size', 'md')
+  })
+
+  it('publishes the size it was given', () => {
+    render(<Loader size="lg" />)
+
+    expect(screen.getByTestId('loader')).toHaveAttribute('data-size', 'lg')
+  })
+
+  it('publishes it on the decorative branch too', () => {
+    render(<Loader decorative size="sm" />)
+
+    expect(screen.getByTestId('loader')).toHaveAttribute('data-size', 'sm')
+  })
+})

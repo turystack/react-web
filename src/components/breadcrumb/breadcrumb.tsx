@@ -28,9 +28,11 @@ const breadcrumb = tv({
 const { root, list, item, link, page, separator, ellipsis } = breadcrumb()
 
 function BreadcrumbRoot({ children }: PropsWithChildren) {
+  const labels = useLabels()
+
   return (
     <nav
-      aria-label="breadcrumb"
+      aria-label={labels.breadcrumb.label}
       className={root()}
       data-testid="breadcrumb-root"
     >

@@ -5,8 +5,23 @@ import { describe, expect, it } from 'vitest'
 import { TuryProvider } from '@/components/tury-provider'
 
 import { Label } from './label'
+import type { WithLabelProps } from './label.types'
 
 describe('Label', () => {
+  it('takes no class from outside, bare or through a label config', () => {
+    const config: WithLabelProps<object>['label'] = {
+      content: 'Email',
+      // @ts-expect-error — className is not part of the contract
+      className: 'uppercase',
+    }
+
+    // @ts-expect-error — className is not part of the contract
+    render(<Label className="uppercase">Email</Label>)
+
+    expect(config).toBeDefined()
+    expect(screen.getByText('Email')).toHaveClass('label-root')
+  })
+
   it('names the input it points at', () => {
     render(
       <>

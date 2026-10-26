@@ -34,6 +34,9 @@ export function DocumentText(props: DocumentTextProps) {
   return (
     <FormatterText
       {...props}
+      published={{
+        'data-variant': props.variant ?? 'any',
+      }}
       testId="document-text"
       text={
         number ? `${prefix}${number}` : (props.fallback ?? DEFAULT_FALLBACK)

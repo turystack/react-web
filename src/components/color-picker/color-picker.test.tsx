@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TuryProvider } from '@/components/tury-provider'
 
 import { ColorPicker, DEFAULT_COLORS } from './color-picker'
+import type { ColorPickerProps } from './color-picker.types'
 
 const TRIGGER = {
   name: 'Select colour',
@@ -328,12 +329,48 @@ describe('ColorPicker trigger', () => {
     )
   })
 
-  it('takes its accessible name from aria-label when one is given', () => {
-    render(<ColorPicker aria-label="Cor da marca" />)
+  it('takes its accessible name from ariaLabel when one is given', () => {
+    render(<ColorPicker ariaLabel="Cor da marca" />)
 
     expect(
       screen.getByRole('button', { name: 'Cor da marca' }),
     ).toBeInTheDocument()
+  })
+
+  it('names a custom trigger that carries no text through ariaLabel', () => {
+    render(
+      <ColorPicker
+        ariaLabel="Brand colour"
+        renderTrigger={() => <span aria-hidden="true" />}
+      />,
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Brand colour' }),
+    ).toBeInTheDocument()
+  })
+
+  it('refuses the native aria-label spelling', () => {
+    // JSX never type-checks hyphenated attributes, so the contract is
+    // asserted on a props object, where an unknown key is an error.
+    const props: ColorPickerProps = {
+      // @ts-expect-error the house name is ariaLabel
+      'aria-label': 'Cor da marca',
+    }
+    render(<ColorPicker {...props} />)
+
+    expect(screen.getByRole('button', TRIGGER)).toBeInTheDocument()
+  })
+
+  it('refuses a trigger class and keeps its own chrome', () => {
+    render(
+      // @ts-expect-error className is not part of the public contract
+      <ColorPicker className="border-none p-0" />,
+    )
+
+    const trigger = screen.getByRole('button', TRIGGER)
+    expect(trigger).toHaveClass('color-picker-trigger', 'border', 'px-2.5')
+    expect(trigger).not.toHaveClass('border-none', 'p-0')
   })
 
   it('carries the name and id it was given for a form', () => {
@@ -362,11 +399,79 @@ describe('ColorPicker trigger', () => {
   })
 })
 
-describe.each(['sm', 'md', 'lg'] as const)('ColorPicker size %s', (size) => {
+describe('ColorPicker trigger variant', () => {
+  it('paints the input chrome by default', () => {
+    render(<ColorPicker />)
+
+    const trigger = screen.getByRole('button', TRIGGER)
+    expect(trigger).toHaveAttribute('data-trigger-variant', 'input')
+    expect(trigger.className.split(' ')[0]).toBe('color-picker-trigger')
+    expect(trigger).toHaveClass('border', 'border-input', 'px-2.5', 'h-10')
+  })
+
+  it('drops the input chrome by itself when a custom trigger is rendered', () => {
+    render(<ColorPicker renderTrigger={() => <span>custom</span>} />)
+
+    const trigger = screen.getByRole('button', { name: 'custom' })
+    expect(trigger).toHaveAttribute('data-trigger-variant', 'bare')
+    expect(trigger.className.split(' ')[0]).toBe('color-picker-trigger')
+    expect(trigger).not.toHaveClass('border', 'px-2.5', 'h-10', 'w-full')
+    expect(trigger).toHaveClass('focus-visible:ring-3')
+  })
+
+  it('keeps the input chrome around a custom trigger when asked', () => {
+    render(
+      <ColorPicker
+        renderTrigger={() => <span>custom</span>}
+        triggerVariant="input"
+      />,
+    )
+
+    const trigger = screen.getByRole('button', { name: 'custom' })
+    expect(trigger).toHaveAttribute('data-trigger-variant', 'input')
+    expect(trigger).toHaveClass('border', 'h-10')
+  })
+
+  it('renders the default content bare when asked', () => {
+    render(<ColorPicker triggerVariant="bare" />)
+
+    const trigger = screen.getByRole('button', TRIGGER)
+    expect(trigger).toHaveAttribute('data-trigger-variant', 'bare')
+    expect(trigger).not.toHaveClass('border', 'h-10')
+  })
+
+  it('still opens the popover from a bare trigger with the keyboard', async () => {
+    render(<ColorPicker renderTrigger={() => <span>custom</span>} />)
+
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'custom' })).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+})
+
+describe.each([
+  ['sm', 'h-9'],
+  ['md', 'h-10'],
+  ['lg', 'h-11'],
+] as const)('ColorPicker size %s', (size, height) => {
   it('stays a reachable trigger', () => {
     render(<ColorPicker size={size} />)
 
     expect(screen.getByRole('button', TRIGGER)).toBeEnabled()
+  })
+
+  it(`is ${height} tall with the input chrome`, () => {
+    render(<ColorPicker size={size} />)
+
+    expect(screen.getByRole('button', TRIGGER)).toHaveClass(height)
+  })
+
+  it('takes no fixed height when bare', () => {
+    render(<ColorPicker size={size} triggerVariant="bare" />)
+
+    expect(screen.getByRole('button', TRIGGER)).not.toHaveClass(height)
   })
 })
 
@@ -497,5 +602,37 @@ describe('ColorPicker labels', () => {
         name: 'Transparente',
       }),
     ).toBeInTheDocument()
+  })
+
+  it('refuses a popup class and keeps the popup fitted to the grid', async () => {
+    render(
+      // @ts-expect-error popupClassName is not part of the public contract
+      <ColorPicker popupClassName="w-96 p-0" />,
+    )
+
+    const popup = await openPicker()
+
+    expect(popup).toHaveClass('color-picker-popup', 'w-fit', 'p-3')
+    expect(popup).not.toHaveClass('w-96')
+  })
+})
+
+describe('ColorPicker axes', () => {
+  it('publishes its default size for a theme to select', () => {
+    render(<ColorPicker />)
+
+    expect(screen.getByTestId('color-picker-trigger')).toHaveAttribute(
+      'data-size',
+      'md',
+    )
+  })
+
+  it('publishes the size it was given', () => {
+    render(<ColorPicker size="lg" />)
+
+    expect(screen.getByTestId('color-picker-trigger')).toHaveAttribute(
+      'data-size',
+      'lg',
+    )
   })
 })

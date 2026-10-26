@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { cn, tv } from './utils'
+import { axes, cn, tv } from './utils'
 
 describe('cn', () => {
   it('joins the class names it is given', () => {
@@ -62,5 +62,89 @@ describe('tv', () => {
         size: 'sm',
       }),
     ).toContain('h-8')
+  })
+})
+
+describe('axes', () => {
+  const styles = tv({
+    base: 'inline-flex',
+    defaultVariants: {
+      size: 'md',
+      variant: 'default',
+    },
+    variants: {
+      block: {
+        true: 'w-full',
+      },
+      size: {
+        md: 'h-9',
+        sm: 'h-8',
+      },
+      triggerSize: {
+        sm: 'h-8',
+      },
+      variant: {
+        default: 'bg-primary',
+        destructive: 'bg-destructive',
+      },
+    },
+  })
+
+  it('publishes the value asked for', () => {
+    expect(
+      axes(styles, {
+        size: 'sm',
+        variant: 'destructive',
+      }),
+    ).toEqual({
+      'data-size': 'sm',
+      'data-variant': 'destructive',
+    })
+  })
+
+  it('publishes the default when the prop was left out', () => {
+    expect(
+      axes(styles, {
+        size: undefined,
+        variant: undefined,
+      }),
+    ).toEqual({
+      'data-size': 'md',
+      'data-variant': 'default',
+    })
+  })
+
+  it('leaves an axis with no value and no default off', () => {
+    expect(
+      axes(styles, {
+        block: undefined,
+        triggerSize: undefined,
+      }),
+    ).toEqual({})
+  })
+
+  it('publishes a true flag and drops a false one', () => {
+    expect(
+      axes(styles, {
+        block: true,
+      }),
+    ).toEqual({
+      'data-block': 'true',
+    })
+    expect(
+      axes(styles, {
+        block: false,
+      }),
+    ).toEqual({})
+  })
+
+  it('names a camel-case axis in kebab case', () => {
+    expect(
+      axes(styles, {
+        triggerSize: 'sm',
+      }),
+    ).toEqual({
+      'data-trigger-size': 'sm',
+    })
   })
 })

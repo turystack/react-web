@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { tv } from 'tailwind-variants'
 
 import { Button } from '@/components/button'
+import { ComposedButton } from '@/components/button/button.composed'
 import { useConfirmChallenge } from '@/components/confirm/confirm.challenge'
 import { useLabels } from '@/components/labels-provider'
 import { Popover } from '@/components/popover'
@@ -11,11 +12,6 @@ import type { PopconfirmProps } from './popconfirm.types'
 
 export const styles = tv({
   slots: {
-    blocked: [
-      'popconfirm-blocked flex rounded-lg outline-none',
-      '[&>button]:w-full',
-      'focus-visible:ring-3 focus-visible:ring-ring/50',
-    ],
     challenge: 'popconfirm-challenge flex flex-col gap-2',
     content: 'popconfirm-content text-sm',
     description: 'popconfirm-description text-muted-foreground text-sm',
@@ -48,7 +44,6 @@ export function Popconfirm(props: PropsWithChildren<PopconfirmProps>) {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const {
-    blocked,
     challenge,
     content: contentSlot,
     description: descriptionSlot,
@@ -142,22 +137,38 @@ export function Popconfirm(props: PropsWithChildren<PopconfirmProps>) {
     await confirm()
   }
 
+  // Blocked by the challenge, the button stays in the tab order (aria-disabled,
+  // not the disabled attribute) and is described by the reason: a disabled
+  // button takes no focus, so a keyboard reader could never land on it to
+  // hear why it will not act. Base UI still refuses its clicks and keys.
+  const whyBlocked = blockedReason
+    ? {
+        'aria-describedby': hintId,
+        focusableWhenDisabled: true,
+      }
+    : {}
+
   const confirmAction = (
-    <Button
+    <ComposedButton
       data-testid="popconfirm-confirm"
       size="sm"
       {...confirmProps}
+      {...whyBlocked}
       disabled={confirmProps?.disabled || Boolean(blockedReason)}
       loading={running}
       onClick={() => void confirm()}
     >
       {confirmText ?? labels.confirm.confirm}
-    </Button>
+    </ComposedButton>
   )
 
   return (
+    // asChild: the consumer's Button is the trigger itself — one control with
+    // one name and aria-expanded on it, not a Button inside a span
+    // role="button". Text children still fall back to Popover's wrapper.
     <Popover
       align={align}
+      asChild
       content={
         <div className={root()} data-testid="popconfirm">
           <span className={titleSlot()} data-testid="popconfirm-title">
@@ -199,19 +210,7 @@ export function Popconfirm(props: PropsWithChildren<PopconfirmProps>) {
             >
               {cancelText ?? labels.common.cancel}
             </Button>
-            {blockedReason ? (
-              <span
-                aria-describedby={hintId}
-                className={blocked()}
-                data-testid="popconfirm-blocked"
-                // biome-ignore lint/a11y/noNoninteractiveTabindex: a disabled button takes no focus, so this wrapper is the only place a reader can land to hear why it is blocked
-                tabIndex={0}
-              >
-                {confirmAction}
-              </span>
-            ) : (
-              confirmAction
-            )}
+            {confirmAction}
           </div>
         </div>
       }

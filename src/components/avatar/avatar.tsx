@@ -2,6 +2,8 @@ import { Avatar as AvatarPrimitive } from '@base-ui/react/avatar'
 import { Children, type PropsWithChildren } from 'react'
 import { tv } from 'tailwind-variants'
 
+import { axes } from '@/support/utils'
+
 import type { AvatarGroupProps, AvatarProps } from './avatar.types'
 
 const avatar = tv({
@@ -67,7 +69,14 @@ function Avatar({
   })
 
   return (
-    <AvatarPrimitive.Root className={root()} data-testid="avatar-root">
+    <AvatarPrimitive.Root
+      className={root()}
+      data-testid="avatar-root"
+      {...axes(avatar, {
+        size,
+        variant,
+      })}
+    >
       {src && (
         <AvatarPrimitive.Image
           alt={alt}
@@ -108,7 +117,14 @@ function AvatarGroup({
   const hidden = all.length - shown.length
 
   return (
-    <div className={group()} data-testid="avatar-group">
+    <div
+      className={group()}
+      data-testid="avatar-group"
+      {...axes(avatar, {
+        size,
+        variant,
+      })}
+    >
       {shown}
       {hidden > 0 ? (
         <span className={groupCount()} data-testid="avatar-group-count">

@@ -7,7 +7,7 @@
  * Behavior:
  * - Toasts appear at top-center (configurable)
  * - Auto-dismiss after timeout
- * - Color-coded left border: green (success), red (error), yellow (warning), blue (info)
+ * - Color-coded left border from the theme tokens: success, destructive (error), warning, info
  * - Custom icons per variant
  * - Action and cancel button support
  * - Multiple toasts stack with grouping

@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
+import { LabelsProvider } from '@/components/labels-provider'
+
 import { TimeInput } from './time-input'
 
 function hours() {
@@ -22,6 +24,34 @@ function seconds() {
     name: 'seconds',
   })
 }
+
+describe('TimeInput segment names', () => {
+  it('takes each segment name from the labels provider', () => {
+    render(
+      <LabelsProvider
+        labels={{
+          timeInput: {
+            hours: 'Horas',
+            minutes: 'Minutos',
+            seconds: 'Segundos',
+          },
+        }}
+      >
+        <TimeInput withSeconds />
+      </LabelsProvider>,
+    )
+
+    expect(
+      screen.getByRole('spinbutton', { name: 'Horas' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('spinbutton', { name: 'Minutos' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('spinbutton', { name: 'Segundos' }),
+    ).toBeInTheDocument()
+  })
+})
 
 describe('TimeInput', () => {
   it('renders one segment per unit and no seconds by default', () => {
@@ -746,5 +776,101 @@ describe('TimeInput when the parent refuses an edit', () => {
 
     expect(hours()).toHaveValue('')
     expect(minutes()).toHaveValue('30')
+  })
+})
+
+describe('TimeInput contract', () => {
+  it('groups its segments under the name, state and description it is given', () => {
+    render(
+      <TimeInput
+        aria-describedby="start-hint"
+        aria-invalid
+        ariaLabel="Start time"
+        id="start"
+      />,
+    )
+
+    const group = screen.getByRole('group', { name: 'Start time' })
+    expect(group).toHaveAttribute('id', 'start')
+    expect(group).toHaveAttribute('aria-invalid', 'true')
+    expect(group).toHaveAttribute('aria-describedby', 'start-hint')
+    expect(group).toContainElement(
+      screen.getByRole('spinbutton', { name: 'hours' }),
+    )
+  })
+
+  it('draws the group as a native fieldset with no legend of its own', () => {
+    render(<TimeInput ariaLabel="Start time" />)
+
+    const group = screen.getByRole('group', { name: 'Start time' })
+    expect(group.tagName).toBe('FIELDSET')
+    expect(group).not.toHaveAttribute('role')
+    expect(group.querySelector('legend')).toBeNull()
+  })
+
+  it('hands the group its clicks and key presses through onClick and onKeyDown', async () => {
+    const onKeyDown = vi.fn()
+    const onClick = vi.fn()
+    render(
+      <TimeInput ariaLabel="Start" onClick={onClick} onKeyDown={onKeyDown} />,
+    )
+
+    // A segment keeps its own clicks; the box around the segments is the group.
+    await userEvent.click(screen.getByRole('group', { name: 'Start' }))
+    expect(onClick).toHaveBeenCalledTimes(1)
+
+    hours().focus()
+    await userEvent.keyboard('1')
+    expect(onKeyDown).toHaveBeenCalled()
+    expect(onKeyDown.mock.calls[0]?.[0]).toHaveProperty('key', '1')
+  })
+
+  it('offers no text-field attribute a group of segments cannot honour', () => {
+    render(
+      <TimeInput
+        ariaLabel="Start time"
+        // @ts-expect-error — a segment group has no single field to name
+        name="start"
+      />,
+    )
+
+    expect(screen.getByRole('group', { name: 'Start time' })).toBeVisible()
+  })
+})
+
+describe('TimeInput data-testid', () => {
+  it('uses the testing handle the consumer gave the field', () => {
+    render(<TimeInput ariaLabel="Start" data-testid="start-time" />)
+
+    expect(screen.getByTestId('start-time')).toBe(
+      screen.getByRole('group', { name: 'Start' }),
+    )
+    expect(screen.queryByTestId('time-input-field')).not.toBeInTheDocument()
+  })
+
+  it('keeps its own handle when none is given', () => {
+    render(<TimeInput ariaLabel="Start" />)
+
+    expect(screen.getByTestId('time-input-field')).toBe(
+      screen.getByRole('group', { name: 'Start' }),
+    )
+  })
+})
+
+describe('TimeInput axes', () => {
+  it('publishes the resolved defaults on its root', () => {
+    render(<TimeInput />)
+    const root = screen.getByTestId('time-input-root')
+
+    expect(root).toHaveAttribute('data-size', 'md')
+    expect(root).toHaveAttribute('data-variant', 'default')
+  })
+
+  it('publishes an explicit size and variant on its root', () => {
+    render(<TimeInput size="lg" variant="ghost" />)
+    const root = screen.getByTestId('time-input-root')
+
+    expect(root).toHaveAttribute('data-size', 'lg')
+    expect(root).toHaveAttribute('data-variant', 'ghost')
   })
 })

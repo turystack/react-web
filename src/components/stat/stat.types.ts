@@ -11,16 +11,25 @@
  *   locale of its own
  * - `trend` is the same idea for the change beside it; pass a coloured
  *   NumberText and it reads as up or down without a second colour vocabulary
+ * - `trendPlacement` puts the trend on the figure's line (`inline`, default)
+ *   or on its own line under it (`below`), for a tile too narrow for both.
+ *   Inline, the row wraps rather than clips: when the value leaves no room the
+ *   trend drops to the next line instead of running past the tile
+ * - The root takes `min-w-0`, so inside a grid or flex cell it shrinks with the
+ *   cell instead of forcing it wider than the track
  * - `loading` renders skeletons the size of the content that is coming, so the
  *   card does not resize when the number lands
  *
  * Implementation:
  * - <Stat label="Revenue" value={<MoneyText value={cents} />} trend={<NumberText colored signDisplay="always" value={0.12} variant="percent" />} />
+ * - <Stat label="Revenue" trendPlacement="below" value={…} trend={…} />
  *
  * Dependencies: Skeleton
  */
 
 export type StatAlign = 'start' | 'center'
+
+export type StatTrendPlacement = 'inline' | 'below'
 
 export type StatProps = {
   align?: StatAlign // where the content sits; default start
@@ -29,5 +38,6 @@ export type StatProps = {
   label: string // what the number counts (required)
   loading?: boolean // renders placeholders in the shape of the content
   trend?: React.ReactNode // the change beside the figure, already formatted
+  trendPlacement?: StatTrendPlacement // trend on the figure's line or under it; default inline
   value: React.ReactNode // the figure itself, already formatted (required)
 }

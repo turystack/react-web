@@ -6,6 +6,13 @@
  *
  * Behavior:
  * - Input is read-only - clicking opens a popover with quick presets and Calendar
+ * - A calendar button (named by the `dateInput.open` label) sits left of the
+ *   field and a clear button right of it: sibling <button>s, nothing
+ *   interactive nested in another. The popup anchors to the whole field
+ * - Those two buttons are the field's sections, so the contract has no
+ *   `leftSection`/`rightSection` (TypeScript refuses them rather than the
+ *   field dropping them in silence). `leftSectionWidth`/`rightSectionWidth`
+ *   still size the two button slots
  * - Calendar renders with numberOfMonths={2} and mode="range"
  * - Displays formatted range as "dd/MM/yyyy ~ dd/MM/yyyy"
  * - Selecting dates or presets updates a draft value
@@ -33,7 +40,7 @@ export type DateRangeInputPreset = {
 
 export type DateRangeInputProps = Omit<
   InputProps,
-  'value' | 'defaultValue' | 'onChange'
+  'value' | 'defaultValue' | 'onChange' | 'leftSection' | 'rightSection'
 > & {
   value?: DateRange | null // controlled range value
   defaultValue?: DateRange | null // uncontrolled initial range

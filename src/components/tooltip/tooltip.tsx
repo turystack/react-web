@@ -10,7 +10,7 @@ const tooltip = tv({
   slots: {
     arrow: [
       'tooltip-arrow z-50 size-2.5 rotate-45',
-      'rounded-[2px]',
+      'rounded-[calc(var(--radius)*0.2)]',
       'bg-foreground fill-foreground',
       'translate-y-[calc(-50%-2px)]',
       'data-[side=bottom]:top-1',
@@ -82,4 +82,4 @@ function Tooltip({
   )
 }
 
-export { Tooltip }
+export { Tooltip, tooltip as tooltipStyles }

@@ -25,6 +25,14 @@ import type { ReactNode } from 'react'
  *   two beside it every time a filter is set
  * - `value` is read, never written: it is counted, so Reset's enabled state and
  *   the Filters badge follow the state instead of a number kept by hand
+ * - `variant="grid"` is the same items laid out as a form rather than a bar:
+ *   every item is a cell of an even grid, its `label` above its field, and the
+ *   field fills the cell. `placement` means nothing there — a grid has no
+ *   second row to hide things in. It is the shape a filter section takes inside
+ *   a modal or a sheet, where a row of fixed 208px boxes would wrap unevenly
+ * - `columns` counts the grid's cells per row once there is room for them. The
+ *   room is the grid's own width, not the viewport's: inside a 512px modal on a
+ *   wide screen, a viewport breakpoint would still ask for four columns
  *
  * Implementation:
  * - Only keys that have an item are counted. A route's search carries `page`,
@@ -35,6 +43,9 @@ import type { ReactNode } from 'react'
  * - The field is `Input` with `debounce`, so the debouncing is the library's
  *   one implementation rather than a second one here
  * - Its own words come from the labels contract, never hardcoded
+ * - The query field is named by `filter.ariaLabel`, else by the words its
+ *   placeholder shows (`filter.placeholder`, else `labels.search.placeholder`),
+ *   so it keeps a name once the placeholder disappears under typed text
  *
  * Dependencies: Input, Button, Popover, Badge components; labels provider
  */
@@ -42,11 +53,18 @@ import type { ReactNode } from 'react'
 /** How many of the row's filters are in play, and where the rest live. */
 export type SearchPlacement = 'inline' | 'popover' | 'expand'
 
+/** A list screen's bar, or the filter section of a form. */
+export type SearchVariant = 'bar' | 'grid'
+
+/** Grid cells per row, from the width that fits them; a narrow grid is one column. */
+export type SearchColumns = 1 | 2 | 3 | 4
+
 export type SearchFilterProps = {
   value?: string | null // controlled query
   defaultValue?: string | null // uncontrolled initial query
   onChange?: (value: string | null) => void // fires debounced
   placeholder?: string // defaults to the labels contract
+  ariaLabel?: string // the field's accessible name; defaults to the placeholder's words
   loading?: boolean // shows the field's own loader
 }
 
@@ -78,4 +96,6 @@ export type SearchProps<
   items?: SearchItems<T>[] // the filters, each saying where it lives
   value?: T // the current values, keyed by item id — read to count
   onReset?: () => void // shown while `onReset` is given, enabled while something is set
+  variant?: SearchVariant // bar (default) or grid: every item a labelled cell
+  columns?: SearchColumns // grid only: cells per row once they fit; default 2
 }

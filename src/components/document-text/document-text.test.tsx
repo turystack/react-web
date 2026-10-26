@@ -95,3 +95,21 @@ describe('DocumentText', () => {
     expect(custom).toHaveTextContent('not informed')
   })
 })
+
+describe('DocumentText axes', () => {
+  it('publishes its default variant for a theme to select', () => {
+    render(<DocumentText value="12345678909" />)
+
+    expect(
+      screen.getByTestId('document-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'any')
+  })
+
+  it('publishes the variant it was given', () => {
+    render(<DocumentText value="12345678909" variant="cpf" />)
+
+    expect(
+      screen.getByTestId('document-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'cpf')
+  })
+})

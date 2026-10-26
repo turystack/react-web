@@ -9,7 +9,7 @@
  * - Variant: default fills the edge it slides from; floating sits inset from it,
  *   rounded on every corner, sized to its content — a bar rather than a panel
  * - Modal by default: focus is trapped, the page scroll is locked and a backdrop
- *   covers what is behind. `modal={false}` renders no backdrop and leaves the
+ *   (the shared blurred `bg-overlay` scrim) covers what is behind. `modal={false}` renders no backdrop and leaves the
  *   page usable, which is what a surface that comments on the page below it
  *   needs — a bulk actions bar, a live filter summary
  * - `dismissible={false}` refuses to close on an outside press, for a sheet

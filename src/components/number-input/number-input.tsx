@@ -1,7 +1,9 @@
 import { NumberField } from '@base-ui/react/number-field'
 import { useState } from 'react'
 import { tv } from 'tailwind-variants'
+import { useFormFieldControl } from '@/components/form/form.context'
 import { Minus, Plus } from '@/internal/icons'
+import { axes } from '@/support/utils'
 
 import type { NumberInputProps } from './number-input.types'
 
@@ -47,6 +49,14 @@ const numberInput = tv({
 })
 
 function NumberInput({
+  id,
+  name,
+  form,
+  ariaLabel,
+  'aria-invalid': ariaInvalid,
+  'aria-describedby': ariaDescribedBy,
+  required,
+  readOnly,
   value,
   defaultValue,
   onChange,
@@ -58,6 +68,19 @@ function NumberInput({
   placeholder,
   grouping = true,
 }: NumberInputProps) {
+  // Form.Field's id, description/error ids and error state, unless given.
+  const control = useFormFieldControl({
+    describedBy: ariaDescribedBy,
+    id,
+    invalid: ariaInvalid,
+  })
+  // The group of field + steppers carries role="group" only when something
+  // names it: an explicit ariaLabel, else the Form.Field's label. With no
+  // name it stays a plain wrapper — an unnamed group is noise to a screen
+  // reader, and the field inside is what is labelled.
+  const groupLabelledBy =
+    ariaLabel === undefined && control.inField ? control.labelledBy : undefined
+  const groupNamed = ariaLabel !== undefined || groupLabelledBy !== undefined
   const [displayValue, setDisplayValue] = useState<number | null | undefined>(
     undefined,
   )
@@ -93,37 +116,62 @@ function NumberInput({
   }
 
   return (
-    <div className={root()} data-testid="number-input-root">
+    <div
+      className={root()}
+      {...axes(numberInput, {
+        size,
+      })}
+      data-testid="number-input-root"
+    >
       <NumberField.Root
         className="number-input-control w-full"
         defaultValue={defaultValue ?? undefined}
         disabled={disabled}
+        form={form}
         format={resolvedFormat}
+        id={control.id}
         max={max}
         min={min}
+        name={name}
         onValueChange={handleValueChange}
         onValueCommitted={handleValueCommitted}
+        readOnly={readOnly}
+        required={required}
         step={step}
         value={resolvedValue}
       >
         <NumberField.Group
+          aria-label={ariaLabel}
+          aria-labelledby={groupLabelledBy}
           className={group()}
           data-disabled={disabled ? '' : undefined}
           data-testid="number-input-group"
+          role={groupNamed ? 'group' : undefined}
         >
+          {/*
+            The field first in the DOM, the Decrease button drawn before it by
+            `order-first`. A <label> wrapping this input hands its name and its
+            clicks to the first labelable element inside it — which was the
+            Decrease button, so a labelled NumberInput had an unnamed field and
+            a caption that focused "−". The buttons are out of the tab order,
+            so moving them changes nothing for the keyboard.
+          */}
+          <NumberField.Input
+            aria-describedby={control.describedBy}
+            aria-invalid={control.invalid || undefined}
+            aria-label={ariaLabel}
+            className={field()}
+            data-testid="number-input-field"
+            placeholder={placeholder}
+          />
           <NumberField.Decrement
             className={btn({
-              className: 'border-r',
+              className: 'order-first border-r',
             })}
             data-testid="number-input-decrement"
           >
             <Minus size={14} />
           </NumberField.Decrement>
-          <NumberField.Input
-            className={field()}
-            data-testid="number-input-field"
-            placeholder={placeholder}
-          />
           <NumberField.Increment
             className={btn({
               className: 'border-l',

@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/empty-state'
 import { useLabels } from '@/components/labels-provider'
 import { LoadingOverlay } from '@/components/loading-overlay'
 import { Skeleton } from '@/components/skeleton'
+import { AlertCircle, Inbox, Lock } from '@/internal/icons'
 
 import type { LoadedProps } from './loaded.types'
 
@@ -33,7 +34,7 @@ export function Loaded<T>({
 
   if (outcome.status === 'pending') {
     return (
-      <div className={root()} data-testid="loaded-pending">
+      <div className={root()} data-size={size} data-testid="loaded-pending">
         {loadingSection ?? (
           <div className={loading()}>
             {Array.from(
@@ -54,15 +55,17 @@ export function Loaded<T>({
 
   if (outcome.status === 'denied') {
     return (
-      <div className={state()} data-testid="loaded-denied">
-        {deniedSection ?? <EmptyState size={size} title={outcome.reason} />}
+      <div className={state()} data-size={size} data-testid="loaded-denied">
+        {deniedSection ?? (
+          <EmptyState icon={<Lock />} size={size} title={outcome.reason} />
+        )}
       </div>
     )
   }
 
   if (outcome.status === 'error') {
     return (
-      <div className={state()} data-testid="loaded-error">
+      <div className={state()} data-size={size} data-testid="loaded-error">
         {errorSection ?? (
           <EmptyState
             action={
@@ -70,6 +73,8 @@ export function Loaded<T>({
                 {labels.common.retry}
               </Button>
             }
+            description={labels.list.errorDescription}
+            icon={<AlertCircle />}
             size={size}
             title={labels.list.error}
           />
@@ -80,8 +85,17 @@ export function Loaded<T>({
 
   if (outcome.status === 'empty') {
     return (
-      <div className={state()} data-testid="loaded-empty">
-        {emptySection ?? <EmptyState size={size} title={labels.list.empty} />}
+      <div className={state()} data-size={size} data-testid="loaded-empty">
+        {/* Every state a card of the same shape — icon, what happened, what
+            to do — so switching between them moves nothing but the words. */}
+        {emptySection ?? (
+          <EmptyState
+            description={labels.list.emptyDescription}
+            icon={<Inbox />}
+            size={size}
+            title={labels.list.empty}
+          />
+        )}
       </div>
     )
   }
@@ -90,6 +104,7 @@ export function Loaded<T>({
     <div
       aria-busy={outcome.refreshing ? true : undefined}
       className={root()}
+      data-size={size}
       data-testid="loaded-content"
     >
       {children(outcome.data)}

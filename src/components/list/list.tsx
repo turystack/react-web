@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type KeyboardEvent, type MouseEvent, useEffect, useState } from 'react'
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
 import { EmptyState } from '@/components/empty-state'
@@ -7,7 +7,8 @@ import { Loader } from '@/components/loader'
 import { LoadingOverlay } from '@/components/loading-overlay'
 import { Pagination } from '@/components/pagination'
 import { Skeleton } from '@/components/skeleton'
-import { ChevronDown } from '@/internal/icons'
+import { AlertCircle, ChevronDown, Inbox, Lock } from '@/internal/icons'
+import { isRowActivation } from '@/internal/row-activation'
 
 import type { ListItemKey, ListProps } from './list.types'
 
@@ -27,15 +28,24 @@ const styles = tv({
     loadingMore:
       'flex min-w-0 list-loading-more items-center justify-center gap-2 py-3 text-muted-foreground text-sm',
     root: 'relative flex w-full min-w-0 list-root flex-col gap-4',
-    row: 'list-row min-w-0',
+    row: 'list-row min-w-0 aria-[current=true]:rounded-md aria-[current=true]:bg-accent',
     sentinel: 'h-px w-full list-sentinel',
     state:
       'flex min-h-24 w-full min-w-0 list-state items-center justify-center p-4 text-center text-muted-foreground text-sm',
   },
   variants: {
+    clickable: {
+      true: {
+        row: 'cursor-pointer rounded-md outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50',
+      },
+    },
+    // Room on both sides of every divider. A border alone sat flush against
+    // the text above it and the one below, so each row read as glued to the
+    // line; the first row has no line above and the last none below, so they
+    // keep their outer edge.
     divided: {
       true: {
-        row: 'border-border border-b last:border-b-0',
+        row: 'border-border border-b py-3 first:pt-0 last:border-b-0 last:pb-0',
       },
     },
     gap: {
@@ -97,6 +107,8 @@ function ListLoadingState({ rows }: { rows: number }) {
 }
 
 function List<T>({
+  activeKey,
+  ariaLabel,
   deniedSection,
   divided,
   emptySection,
@@ -110,6 +122,7 @@ function List<T>({
   loading,
   loadingRows = DEFAULT_LOADING_ROWS,
   loadingSection,
+  onItemClick,
   outcome,
   padded,
   pagination,
@@ -152,10 +165,38 @@ function List<T>({
     sentinel,
     state,
   } = styles({
+    clickable: Boolean(onItemClick),
     divided,
     gap,
     padded,
   })
+
+  const handleRowClick = (
+    event: MouseEvent<HTMLLIElement>,
+    item: T,
+    index: number,
+  ) => {
+    if (onItemClick && isRowActivation(event.currentTarget, event.target)) {
+      onItemClick(item, index)
+    }
+  }
+
+  // Only a key pressed on the row itself: Enter on a focused button or Space
+  // on a checkbox inside the row belongs to that control.
+  const handleRowKeyDown = (
+    event: KeyboardEvent<HTMLLIElement>,
+    item: T,
+    index: number,
+  ) => {
+    if (!onItemClick || event.target !== event.currentTarget) {
+      return
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onItemClick(item, index)
+    }
+  }
 
   useEffect(() => {
     if (!sentinelNode || !canLoadMore) {
@@ -192,7 +233,9 @@ function List<T>({
     if (outcome?.status === 'denied') {
       return (
         <div className={state()} data-testid="list-denied">
-          {deniedSection ?? <EmptyState size="sm" title={outcome.reason} />}
+          {deniedSection ?? (
+            <EmptyState icon={<Lock />} size="sm" title={outcome.reason} />
+          )}
         </div>
       )
     }
@@ -200,10 +243,12 @@ function List<T>({
     if (isFailed && isEmpty) {
       return (
         <div className={state()} data-testid="list-error">
-          {errorSection ??
-            (outcome ? (
-              <EmptyState
-                action={
+          {errorSection ?? (
+            <EmptyState
+              action={
+                // Only a read knows how to run again; a list handed `error`
+                // by hand has nothing to retry with.
+                outcome ? (
                   <Button
                     onClick={outcome.retry}
                     type="button"
@@ -211,13 +256,14 @@ function List<T>({
                   >
                     {labels.common.retry}
                   </Button>
-                }
-                size="sm"
-                title={labels.list.error}
-              />
-            ) : (
-              labels.list.error
-            ))}
+                ) : undefined
+              }
+              description={labels.list.errorDescription}
+              icon={<AlertCircle />}
+              size="sm"
+              title={labels.list.error}
+            />
+          )}
         </div>
       )
     }
@@ -225,7 +271,14 @@ function List<T>({
     if (isEmpty) {
       return (
         <div className={state()} data-testid="list-empty">
-          {emptySection ?? labels.list.empty}
+          {emptySection ?? (
+            <EmptyState
+              description={labels.list.emptyDescription}
+              icon={<Inbox />}
+              size="sm"
+              title={labels.list.empty}
+            />
+          )}
         </div>
       )
     }
@@ -242,16 +295,38 @@ function List<T>({
       data-testid="list-root"
     >
       {stateContent ?? (
-        <ul className={content()} data-testid="list-content">
-          {data.map((dataItem, index) => (
-            <li
-              className={row()}
-              data-testid="list-item"
-              key={getItemKey(dataItem, index, itemKey)}
-            >
-              {renderItem(dataItem, index)}
-            </li>
-          ))}
+        <ul
+          aria-label={ariaLabel}
+          className={content()}
+          data-testid="list-content"
+        >
+          {data.map((dataItem, index) => {
+            const key = getItemKey(dataItem, index, itemKey)
+            const isActive =
+              activeKey !== undefined && String(activeKey) === key
+
+            return (
+              <li
+                aria-current={isActive ? 'true' : undefined}
+                className={row()}
+                data-testid="list-item"
+                key={key}
+                onClick={
+                  onItemClick
+                    ? (event) => handleRowClick(event, dataItem, index)
+                    : undefined
+                }
+                onKeyDown={
+                  onItemClick
+                    ? (event) => handleRowKeyDown(event, dataItem, index)
+                    : undefined
+                }
+                tabIndex={onItemClick ? 0 : undefined}
+              >
+                {renderItem(dataItem, index)}
+              </li>
+            )
+          })}
         </ul>
       )}
 

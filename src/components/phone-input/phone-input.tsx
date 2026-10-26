@@ -5,7 +5,6 @@ import * as RPNInput from 'react-phone-number-input'
 import flags from 'react-phone-number-input/flags'
 import { tv } from 'tailwind-variants'
 import { ChevronDown } from '@/internal/icons'
-
 import {
   Command,
   CommandEmpty,
@@ -16,10 +15,11 @@ import {
 } from '@/shadcn/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shadcn/popover'
 import { ScrollArea } from '@/shadcn/scroll-area'
+import { axes } from '@/support/utils'
 
 import { buttonShared } from '../button/button.shared'
-import { Input } from '../input'
-import { DEBOUNCE_MS } from '../input/input.shared'
+import { ComposedInput } from '../input/input.composed'
+import { DEBOUNCE_MS, inputShared } from '../input/input.shared'
 import type { InputProps, InputSize } from '../input/input.types'
 import type { PhoneInputProps, PhoneValue } from './phone-input.types'
 import { getPhoneInputValue, getPhoneValue } from './phone-input.utils'
@@ -82,13 +82,18 @@ const chevronStyles = tv({
   },
 })
 
+/** What react-phone-number-input injects on top of the field's own props. */
+type RpnInjectedProps = {
+  [attribute: string]: unknown
+  onChange?: React.ChangeEventHandler<HTMLInputElement>
+}
+
 const PhoneInput = React.forwardRef<
   React.ElementRef<typeof RPNInput.default>,
   PhoneInputProps
 >(
   (
     {
-      className,
       debounce,
       defaultValue,
       loading,
@@ -139,18 +144,21 @@ const PhoneInput = React.forwardRef<
       emitDebounced(next)
     }
 
+    /**
+     * react-phone-number-input renders this with the field's native props
+     * (value, onChange, type="tel", autoComplete, the consumer's id/name/aria…)
+     * — plumbing between two components, not a contract. The class and style
+     * it may inject are dropped so the field keeps its own look (PROP-1).
+     */
     const inputComponent = React.useCallback(
       ({
-        className: inputClassName,
+        className: _injectedClass,
+        style: _injectedStyle,
         onChange: rpnOnChange,
         ...inputProps
-      }: InputProps & {
-        onChange?: React.ChangeEventHandler<HTMLInputElement>
-      }) => (
-        <Input
-          className={inputFieldStyles({
-            className: inputClassName,
-          })}
+      }: InputProps & RpnInjectedProps) => (
+        <ComposedInput
+          fieldClass={inputFieldStyles()}
           loading={loading}
           onChange={(val) =>
             rpnOnChange?.({
@@ -177,8 +185,15 @@ const PhoneInput = React.forwardRef<
 
     return (
       <RPNInput.default
-        className={rootStyles({
-          className,
+        {...props}
+        // After the spread: the root's look is its own, whatever arrives at
+        // runtime (PROP-1).
+        className={rootStyles()}
+        // The container takes no props of its own beyond these: everything
+        // else the library spreads onto the field.
+        containerComponentProps={axes(inputShared, {
+          size,
+          variant,
         })}
         countrySelectComponent={countrySelectComponent}
         flagComponent={FlagComponent}
@@ -195,7 +210,6 @@ const PhoneInput = React.forwardRef<
         }}
         smartCaret={false}
         value={value === undefined ? initialValueRef.current : inputValue}
-        {...props}
       />
     )
   },
@@ -264,7 +278,7 @@ const CountrySelect = ({
           </Button>
         }
       />
-      <PopoverContent className="phone-input-popover w-[300px] p-0">
+      <PopoverContent className="phone-input-popover w-75 p-0">
         <Command>
           <CommandInput
             onValueChange={(value) => {

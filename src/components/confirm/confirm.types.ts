@@ -11,7 +11,9 @@
  *   nothing more, while `typed`, `password`, `otp` and `acknowledge` each put a
  *   challenge between the question and the confirm button
  * - The confirm button stays disabled until the challenge is satisfied, and it
- *   states why it is blocked instead of only looking dead
+ *   states why it is blocked instead of only looking dead: while blocked it is
+ *   aria-disabled but stays in the tab order, described by the reason, and
+ *   ignores clicks, Enter and Space
  * - Every field the challenge renders carries a placeholder. `typed` shows the
  *   exact text that has to be reproduced, because a field asking you to retype
  *   a name you cannot see while typing it is a puzzle, not a safeguard
@@ -29,7 +31,8 @@
  *
  * Implementation:
  * - Base UI AlertDialog (Portal > Backdrop > Popup): it blocks the page behind
- *   it and traps focus, and initial focus lands on the challenge field because
+ *   it under the shared `bg-overlay` scrim (blurred by `--overlay-blur`) and
+ *   traps focus, and initial focus lands on the challenge field because
  *   that field is the first tabbable element inside the popup
  * - Fields are the library's own Input, PasswordInput, OTPInput and Checkbox
  * - Every string the dialog renders on its own comes from the provider's

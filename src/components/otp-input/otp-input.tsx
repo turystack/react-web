@@ -2,7 +2,9 @@ import type { SlotProps } from 'input-otp'
 import { OTPInput as OTPInputPrimitive } from 'input-otp'
 import { Fragment, useMemo } from 'react'
 import { tv } from 'tailwind-variants'
+import { useFormFieldControl } from '@/components/form/form.context'
 import { MinusIcon } from '@/internal/icons'
+import { axes } from '@/support/utils'
 
 import type { OTPInputProps } from './otp-input.types'
 
@@ -76,6 +78,8 @@ function Slot({
 }
 
 function OTPInput({
+  ariaLabel,
+  id,
   pattern = [6],
   size,
   value,
@@ -86,6 +90,11 @@ function OTPInput({
     () => pattern.reduce((sum, n) => sum + n, 0),
     [pattern],
   )
+
+  // Form.Field's id, description/error ids and error state, unless given.
+  const control = useFormFieldControl({
+    id,
+  })
 
   const { root, group, slot, separator, caret } = otpInput({
     size,
@@ -105,9 +114,21 @@ function OTPInput({
         }
 
   return (
+    // input-otp paints the cells but keeps one real <input> under them; the
+    // name and id land on it, so a <label htmlFor> (Form.Field) or ariaLabel
+    // names the code field a screen reader announces.
     <OTPInputPrimitive
+      aria-describedby={control.describedBy}
+      aria-invalid={control.invalid}
+      aria-label={ariaLabel}
       containerClassName={root()}
+      // input-otp gives the container a class and nothing else: every other
+      // prop lands on the <input>, so the axes ride there with the test id.
+      {...axes(otpInput, {
+        size,
+      })}
       data-testid="otp-input-root"
+      id={control.id}
       maxLength={maxLength}
       onChange={handleChange}
       spellCheck={false}

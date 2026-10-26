@@ -1,12 +1,13 @@
 import type { PropsWithChildren } from 'react'
 import { tv } from 'tailwind-variants'
+import { axes } from '@/support/utils'
 
 import { useLayout } from '../layout.context'
+import { GUTTER_X } from '../layout.gutter'
 import type { LayoutFooterProps } from './footer.types'
 
 const styles = tv({
   defaultVariants: {
-    padding: 'md',
     size: 'md',
   },
   slots: {
@@ -18,18 +19,19 @@ const styles = tv({
         footer: 'border-border border-t',
       },
     },
+    // The shell's gutter, not a scale of its own: see `layout.gutter.ts`.
     padding: {
       lg: {
-        footer: 'px-6',
+        footer: GUTTER_X.lg,
       },
       md: {
-        footer: 'px-4',
+        footer: GUTTER_X.md,
       },
       none: {
-        footer: 'px-0',
+        footer: GUTTER_X.none,
       },
       sm: {
-        footer: 'px-2',
+        footer: GUTTER_X.sm,
       },
     },
     size: {
@@ -67,7 +69,13 @@ function LayoutFooter({
   })
 
   return (
-    <footer className={footer()} data-testid="layout-footer">
+    <footer
+      className={footer()}
+      {...axes(styles, {
+        size,
+      })}
+      data-testid="layout-footer"
+    >
       {children}
     </footer>
   )

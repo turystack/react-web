@@ -2,6 +2,8 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { NumberInput } from '@/components/number-input'
+
 import { Search } from './search'
 
 type OrderFilters = {
@@ -58,14 +60,57 @@ describe('Search', () => {
     expect(screen.getByTestId('search-inline-channelId')).toBeInTheDocument()
   })
 
+  it('names the query field by its placeholder words', () => {
+    render(<Search filter={{ placeholder: 'Search orders' }} />)
+
+    const field = screen.getByRole('textbox', { name: 'Search orders' })
+    expect(field).toHaveAttribute('aria-label', 'Search orders')
+  })
+
+  it('names the query field by the default placeholder label', () => {
+    render(<Search filter={{}} />)
+
+    expect(screen.getByRole('textbox', { name: 'Search' })).toHaveAttribute(
+      'placeholder',
+      'Search',
+    )
+  })
+
+  it('lets ariaLabel name the query field', () => {
+    render(
+      <Search
+        filter={{ ariaLabel: 'Search orders by code', placeholder: 'Code' }}
+      />,
+    )
+
+    expect(
+      screen.getByRole('textbox', { name: 'Search orders by code' }),
+    ).toHaveAttribute('placeholder', 'Code')
+  })
+
+  it('keeps the name once text replaces the placeholder', async () => {
+    render(<Search filter={{ placeholder: 'Search orders' }} />)
+
+    await userEvent.type(screen.getByRole('textbox'), 'abc')
+
+    expect(screen.getByRole('textbox', { name: 'Search orders' })).toHaveValue(
+      'abc',
+    )
+  })
+
   it('keeps a panel filter off the row until the button is used', async () => {
     render(<Search items={items(SEARCH)} value={SEARCH} />)
 
     expect(screen.queryByLabelText('Archived')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    const filters = screen.getByRole('button', { name: /Filters/ })
+    expect(screen.getAllByRole('button', { name: /Filters/ })).toHaveLength(1)
+    expect(filters).toHaveAttribute('aria-expanded', 'false')
+
+    await userEvent.click(filters)
 
     expect(await screen.findByLabelText('Archived')).toBeInTheDocument()
+    expect(filters).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('counts only the keys that have an item', () => {
@@ -302,5 +347,276 @@ describe('Search', () => {
     expect(
       screen.queryByRole('button', { name: 'Show more' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('draws the bar unless asked for the grid', () => {
+    render(<Search items={items(SEARCH)} value={SEARCH} />)
+
+    expect(screen.getByTestId('search-root')).not.toHaveAttribute(
+      'data-variant',
+    )
+    expect(screen.getByTestId('search-row')).toBeInTheDocument()
+    expect(screen.queryByTestId('search-grid-cells')).not.toBeInTheDocument()
+  })
+})
+
+describe('Search grid', () => {
+  function everywhere() {
+    return [
+      {
+        field: <input aria-label="Status" />,
+        id: 'status' as const,
+        label: 'Status',
+      },
+      {
+        field: <input aria-label="Channel" />,
+        id: 'channelId' as const,
+        label: 'Channel',
+        placement: 'expand' as const,
+      },
+      {
+        field: <input aria-label="Archived" />,
+        id: 'archived' as const,
+        label: 'Archived',
+        placement: 'popover' as const,
+      },
+    ]
+  }
+
+  it('says it is the grid, and draws no row', () => {
+    render(<Search items={everywhere()} value={SEARCH} variant="grid" />)
+
+    expect(screen.getByTestId('search-root')).toHaveAttribute(
+      'data-variant',
+      'grid',
+    )
+    expect(screen.queryByTestId('search-row')).not.toBeInTheDocument()
+  })
+
+  it('makes every item a cell, wherever it asked to live on the bar', () => {
+    render(<Search items={everywhere()} value={SEARCH} variant="grid" />)
+
+    const cells = screen.getByTestId('search-grid-cells')
+
+    // A grid has no second row and no panel to hide things in, so the expand
+    // and popover items are on screen from the start, beside the inline one.
+    expect(within(cells).getByTestId('search-cell-status')).toContainElement(
+      screen.getByRole('textbox', {
+        name: 'Status',
+      }),
+    )
+    expect(within(cells).getByTestId('search-cell-channelId')).toContainElement(
+      screen.getByRole('textbox', {
+        name: 'Channel',
+      }),
+    )
+    expect(within(cells).getByTestId('search-cell-archived')).toContainElement(
+      screen.getByRole('textbox', {
+        name: 'Archived',
+      }),
+    )
+    expect(cells.children).toHaveLength(3)
+  })
+
+  it('puts each label above its field, as a form does', () => {
+    render(<Search items={everywhere()} value={SEARCH} variant="grid" />)
+
+    const cell = screen.getByTestId('search-cell-status')
+
+    expect(cell).toHaveClass('flex-col')
+    expect(cell.firstElementChild).toHaveTextContent('Status')
+    expect(cell.firstElementChild).toHaveClass('search-filter-label')
+    expect(cell.lastElementChild).toBe(
+      screen.getByRole('textbox', {
+        name: 'Status',
+      }),
+    )
+  })
+
+  it('names the field it holds, and hands the caption its click, NumberInput too', async () => {
+    render(
+      <Search
+        items={[
+          {
+            field: <NumberInput onChange={() => undefined} value={null} />,
+            id: 'status' as const,
+            label: 'Minimum nights',
+          },
+        ]}
+        value={SEARCH}
+        variant="grid"
+      />,
+    )
+
+    // NumberInput is built from three controls. The label reaches the field,
+    // not the Decrease button drawn before it — so the field has a name, and
+    // clicking the caption puts the caret in it.
+    const field = screen.getByRole('textbox', {
+      name: 'Minimum nights',
+    })
+
+    await userEvent.click(screen.getByText('Minimum nights'))
+
+    expect(field).toHaveFocus()
+    expect(
+      screen.getByRole('button', {
+        name: 'Decrease',
+      }),
+    ).not.toHaveFocus()
+  })
+
+  it('leaves the field alone in its cell when it has no label', () => {
+    render(
+      <Search
+        items={[
+          {
+            field: <input aria-label="Status" />,
+            id: 'status' as const,
+          },
+        ]}
+        value={SEARCH}
+        variant="grid"
+      />,
+    )
+
+    const cell = screen.getByTestId('search-cell-status')
+
+    expect(cell.children).toHaveLength(1)
+    expect(cell.firstElementChild).toBe(screen.getByLabelText('Status'))
+  })
+
+  it('offers neither the Filters button nor Show more', () => {
+    render(<Search items={everywhere()} value={SEARCH} variant="grid" />)
+
+    expect(screen.queryByTestId('popover-trigger')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Filters/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Show more' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('puts the query field above the cells, across the whole grid', () => {
+    render(
+      <Search
+        filter={{ placeholder: 'Search orders' }}
+        items={everywhere()}
+        value={SEARCH}
+        variant="grid"
+      />,
+    )
+
+    const field = screen.getByPlaceholderText('Search orders')
+    const cells = screen.getByTestId('search-grid-cells')
+
+    expect(cells).not.toContainElement(field)
+    expect(field.closest('.search-grid-field')).toHaveClass('w-full')
+    expect(
+      field.compareDocumentPosition(cells) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('draws no query field unless one is asked for', () => {
+    render(<Search items={everywhere()} value={SEARCH} variant="grid" />)
+
+    expect(screen.queryByRole('textbox', { name: /Search/ })).toBeNull()
+    expect(document.querySelector('.search-grid-field')).toBeNull()
+  })
+
+  it('sets Reset apart under the cells, disabled while nothing is set', () => {
+    render(
+      <Search
+        items={everywhere()}
+        onReset={vi.fn()}
+        value={SEARCH}
+        variant="grid"
+      />,
+    )
+
+    const reset = screen.getByRole('button', { name: 'Reset' })
+
+    expect(reset.closest('.search-grid-footer')).toBeInTheDocument()
+    expect(reset).toBeDisabled()
+  })
+
+  it('offers Reset once an item is set, whatever its placement', async () => {
+    const onReset = vi.fn()
+    const value = { ...SEARCH, archived: true }
+
+    render(
+      <Search
+        items={everywhere()}
+        onReset={onReset}
+        value={value}
+        variant="grid"
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
+
+    expect(onReset).toHaveBeenCalledOnce()
+  })
+
+  it('draws no footer when there is no Reset to put in it', () => {
+    render(<Search items={everywhere()} value={SEARCH} variant="grid" />)
+
+    expect(document.querySelector('.search-grid-footer')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Reset' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('answers to its own width, not the viewport', () => {
+    render(<Search items={everywhere()} value={SEARCH} variant="grid" />)
+
+    expect(screen.getByTestId('search-root')).toHaveClass(
+      '@container/search-grid',
+    )
+  })
+
+  it('fits two cells a row by default, once there is room', () => {
+    render(<Search items={everywhere()} value={SEARCH} variant="grid" />)
+
+    const cells = screen.getByTestId('search-grid-cells')
+
+    expect(cells).toHaveClass('grid-cols-1', '@sm/search-grid:grid-cols-2')
+  })
+
+  it('takes the number of columns it is given', () => {
+    const { rerender } = render(
+      <Search columns={1} items={everywhere()} value={SEARCH} variant="grid" />,
+    )
+
+    const cells = () => screen.getByTestId('search-grid-cells')
+
+    expect(cells()).toHaveClass('grid-cols-1')
+    expect(cells()).not.toHaveClass('@sm/search-grid:grid-cols-2')
+
+    rerender(
+      <Search columns={3} items={everywhere()} value={SEARCH} variant="grid" />,
+    )
+
+    expect(cells()).toHaveClass(
+      '@sm/search-grid:grid-cols-2',
+      '@2xl/search-grid:grid-cols-3',
+    )
+
+    rerender(
+      <Search columns={4} items={everywhere()} value={SEARCH} variant="grid" />,
+    )
+
+    expect(cells()).toHaveClass(
+      '@sm/search-grid:grid-cols-2',
+      '@3xl/search-grid:grid-cols-4',
+    )
+  })
+
+  it('lets a cell shrink below what its field would like', () => {
+    render(<Search items={everywhere()} value={SEARCH} variant="grid" />)
+
+    // A Select holding chips reports a wider intrinsic size; without this its
+    // column would outgrow the others.
+    expect(screen.getByTestId('search-cell-status')).toHaveClass('min-w-0')
   })
 })

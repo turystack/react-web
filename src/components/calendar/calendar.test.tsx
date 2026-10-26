@@ -443,3 +443,27 @@ describe('Calendar layout', () => {
     expect(onDateChange).toHaveBeenCalledWith(new Date(2024, 5, 15))
   })
 })
+
+describe('Calendar axes', () => {
+  it('publishes its default size for a theme to select', () => {
+    const { container } = render(
+      <Calendar defaultMonth={JUNE_2024} mode="single" />,
+    )
+
+    expect(container.querySelector('.calendar-root')).toHaveAttribute(
+      'data-size',
+      'md',
+    )
+  })
+
+  it('publishes the size it was given', () => {
+    const { container } = render(
+      <Calendar defaultMonth={JUNE_2024} mode="range" size="lg" />,
+    )
+
+    expect(container.querySelector('.calendar-root')).toHaveAttribute(
+      'data-size',
+      'lg',
+    )
+  })
+})

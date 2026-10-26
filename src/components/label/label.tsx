@@ -5,6 +5,7 @@ import { Tooltip } from '@/components/tooltip'
 import { Info } from '@/internal/icons'
 import { cn } from '@/support/utils'
 
+import type { LabelInjectedProps } from './label.shared'
 import type { LabelProps } from './label.types'
 
 const label = tv({
@@ -23,15 +24,17 @@ const label = tv({
   },
 })
 
-function Label({
-  children,
-  htmlFor,
-  required,
-  optional,
-  disabled,
-  tooltip,
-  className,
-}: PropsWithChildren<LabelProps>) {
+function Label(props: PropsWithChildren<LabelProps>) {
+  const {
+    children,
+    htmlFor,
+    id,
+    required,
+    optional,
+    disabled,
+    tooltip,
+    className,
+  } = props as PropsWithChildren<LabelProps> & LabelInjectedProps
   const labels = useLabels()
   const { root, indicator, hint, tooltipIcon } = label({
     disabled,
@@ -43,6 +46,7 @@ function Label({
       data-disabled={disabled ? '' : undefined}
       data-testid="label-root"
       htmlFor={htmlFor}
+      id={id}
     >
       {children}
       {required && (

@@ -6,6 +6,7 @@ import { tv } from 'tailwind-variants'
 import { Badge } from '@/components/badge'
 import { Button } from '@/components/button'
 import { EmptyState } from '@/components/empty-state'
+import { useFormFieldControl } from '@/components/form/form.context'
 import { DEBOUNCE_MS } from '@/components/input/input.shared'
 import { useLabels } from '@/components/labels-provider'
 import { Loader } from '@/components/loader'
@@ -18,6 +19,7 @@ import {
   Search,
   X,
 } from '@/internal/icons'
+import { axes } from '@/support/utils'
 
 import type {
   SelectCreatableOptions,
@@ -31,6 +33,7 @@ const select = tv({
   defaultVariants: {
     size: 'md',
     variant: 'default',
+    width: 'full',
   },
   slots: {
     create: [
@@ -46,9 +49,14 @@ const select = tv({
       'select-checkbox flex size-4 items-center justify-center rounded border border-input transition-colors',
       'data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground',
     ],
+    // The clear control is the trigger's sibling, laid over the space the
+    // trigger keeps free for it (clearSpace): a button nested inside the
+    // trigger button would be an interactive element inside another.
+    clearSpace: 'select-clear-space -mr-1 size-5 shrink-0',
     clearTrigger: [
-      'select-clear-trigger -mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded',
-      'text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+      'select-clear-trigger absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded',
+      'text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground',
+      'focus-visible:ring-2 focus-visible:ring-ring/50',
     ],
     empty: 'select-empty px-3 py-4 text-center text-muted-foreground text-sm',
     groupLabel:
@@ -72,6 +80,8 @@ const select = tv({
       'hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
       'data-disabled:pointer-events-none data-disabled:opacity-50',
     ],
+    // Holds the trigger and its clear control; sized like the trigger.
+    root: 'select-root relative flex',
     popup: [
       'select-popup relative isolate z-50 flex max-h-64 w-(--anchor-width) min-w-36 flex-col',
       'origin-(--transform-origin) overflow-hidden rounded-lg',
@@ -88,7 +98,7 @@ const select = tv({
     ],
     sentinel: 'select-sentinel h-1',
     trigger: [
-      'select-trigger flex w-full min-w-0 cursor-pointer items-center justify-between gap-1.5 rounded-lg',
+      'select-trigger flex cursor-pointer items-center justify-between gap-1.5 rounded-lg',
       'whitespace-nowrap border border-input bg-transparent px-2.5 text-sm',
       'select-none outline-none transition-colors',
       'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
@@ -110,6 +120,28 @@ const select = tv({
       },
       sm: {
         trigger: 'h-9',
+      },
+    },
+    width: {
+      auto: {
+        root: 'w-fit max-w-full shrink-0',
+        trigger: 'w-fit max-w-full shrink-0',
+      },
+      full: {
+        root: 'w-full min-w-0',
+        trigger: 'w-full min-w-0',
+      },
+      lg: {
+        root: 'w-96 max-w-full shrink-0',
+        trigger: 'w-96 max-w-full shrink-0',
+      },
+      md: {
+        root: 'w-72 max-w-full shrink-0',
+        trigger: 'w-72 max-w-full shrink-0',
+      },
+      sm: {
+        root: 'w-56 max-w-full shrink-0',
+        trigger: 'w-56 max-w-full shrink-0',
       },
     },
     variant: {
@@ -435,10 +467,13 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
   loading,
   size,
   variant,
+  width = 'full',
   value,
   defaultValue,
   onChange,
   clearable = true,
+  ariaLabel,
+  id,
 }: ResolvedSelectProps<T, I, O> & {
   mode: 'single'
 }) {
@@ -452,10 +487,13 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
     itemCheck,
     sentinel,
     empty,
+    clearSpace,
     clearTrigger,
+    root,
   } = select({
     size,
     variant,
+    width,
   })
 
   const portalContainer = usePortalContainer()
@@ -541,7 +579,16 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
     onChange?.(null)
   }
 
-  const showClear = clearable && !!selectedOption && !disabled && !loading
+  const labels = useLabels()
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  // Form.Field's id, description/error ids and error state, unless given.
+  const control = useFormFieldControl({
+    id,
+  })
+
+  // The trigger's right slot holds one thing: a rightSection wins over it.
+  const showClear =
+    clearable && !!selectedOption && !disabled && !loading && !rightSection
 
   return (
     <SelectPrimitive.Root
@@ -556,68 +603,73 @@ function SinglePrimitiveSelect<T, I = string, O = I>({
       }}
       value={currentKey || null}
     >
-      <SelectPrimitive.Trigger
-        aria-busy={loading}
-        className={trigger()}
-        data-testid="select-trigger"
-        disabled={disabled || loading}
+      <div
+        className={root()}
+        {...axes(select, {
+          size,
+          variant,
+        })}
+        data-testid="select-root"
       >
-        {leftSection && (
-          <span className="select-left-section shrink-0">{leftSection}</span>
-        )}
-        <span className={triggerValue()} data-testid="select-value">
-          {selectedOption ? (
-            renderValue ? (
-              renderValue(selectedOption)
-            ) : (
-              getLabel(selectedOption, optionLabel)
-            )
-          ) : (
-            <span className="select-placeholder text-muted-foreground">
-              {placeholder}
-            </span>
+        <SelectPrimitive.Trigger
+          aria-busy={loading}
+          aria-describedby={control.describedBy}
+          aria-invalid={control.invalid}
+          aria-label={ariaLabel}
+          className={trigger()}
+          data-testid="select-trigger"
+          data-width={width}
+          disabled={disabled || loading}
+          id={control.id}
+          ref={triggerRef}
+        >
+          {leftSection && (
+            <span className="select-left-section shrink-0">{leftSection}</span>
           )}
-        </span>
-        {loading ? (
-          <Loader decorative size="sm" />
-        ) : rightSection ? (
-          <span className="select-right-section shrink-0">{rightSection}</span>
-        ) : showClear ? (
-          // biome-ignore lint/a11y/useSemanticElements: nested button inside the select trigger is invalid HTML
-          <span
-            aria-label="Clear"
+          <span className={triggerValue()} data-testid="select-value">
+            {selectedOption ? (
+              renderValue ? (
+                renderValue(selectedOption)
+              ) : (
+                getLabel(selectedOption, optionLabel)
+              )
+            ) : (
+              <span className="select-placeholder text-muted-foreground">
+                {placeholder}
+              </span>
+            )}
+          </span>
+          {loading ? (
+            <Loader decorative size="sm" />
+          ) : rightSection ? (
+            <span className="select-right-section shrink-0">
+              {rightSection}
+            </span>
+          ) : showClear ? (
+            <span aria-hidden className={clearSpace()} />
+          ) : (
+            <SelectPrimitive.Icon
+              render={
+                <ChevronDown className="select-trigger-icon size-4 text-muted-foreground" />
+              }
+            />
+          )}
+        </SelectPrimitive.Trigger>
+        {showClear && (
+          <button
+            aria-label={labels.common.clear}
             className={clearTrigger()}
             data-testid="select-clear"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
+            onClick={() => {
               handleClear()
+              triggerRef.current?.focus()
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                e.stopPropagation()
-                handleClear()
-              }
-            }}
-            onMouseDown={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            role="button"
-            tabIndex={0}
+            type="button"
           >
             <X size={14} />
-          </span>
-        ) : (
-          <SelectPrimitive.Icon
-            render={
-              <ChevronDown className="select-trigger-icon size-4 text-muted-foreground" />
-            }
-          />
+          </button>
         )}
-      </SelectPrimitive.Trigger>
+      </div>
       <SelectPrimitive.Portal container={portalContainer}>
         <SelectPrimitive.Positioner
           alignItemWithTrigger={false}
@@ -735,10 +787,13 @@ function SingleSearchableSelect<T, I = string, O = I>({
   loading,
   size,
   variant,
+  width = 'full',
   value,
   defaultValue,
   onChange,
   clearable = true,
+  ariaLabel,
+  id,
 }: ResolvedSelectProps<T, I, O> & {
   mode: 'single'
 }) {
@@ -754,12 +809,15 @@ function SingleSearchableSelect<T, I = string, O = I>({
     itemCheck,
     sentinel,
     empty,
+    clearSpace,
     clearTrigger,
     create,
     createLabel,
+    root,
   } = select({
     size,
     variant,
+    width,
   })
 
   const labels = useLabels()
@@ -926,70 +984,83 @@ function SingleSearchableSelect<T, I = string, O = I>({
     onChange?.(null)
   }
 
-  const showClear = clearable && !!selectedOption && !disabled && !loading
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  // Form.Field's id, description/error ids and error state, unless given.
+  const control = useFormFieldControl({
+    id,
+  })
+
+  // The trigger's right slot holds one thing: a rightSection wins over it.
+  const showClear =
+    clearable && !!selectedOption && !disabled && !loading && !rightSection
 
   return (
     <Popover.Root onOpenChange={setOpen} open={open}>
-      <Popover.Trigger
-        aria-busy={loading}
-        aria-controls={open ? listboxId : undefined}
-        className={trigger()}
-        data-testid="select-trigger"
-        disabled={disabled || loading}
-        role="combobox"
+      <div
+        className={root()}
+        {...axes(select, {
+          size,
+          variant,
+        })}
+        data-testid="select-root"
       >
-        {leftSection && (
-          <span className="select-left-section shrink-0">{leftSection}</span>
-        )}
-        <span className={triggerValue()} data-testid="select-value">
-          {selectedOption ? (
-            renderValue ? (
-              renderValue(selectedOption)
-            ) : (
-              getLabel(selectedOption, optionLabel)
-            )
-          ) : (
-            <span className="select-placeholder text-muted-foreground">
-              {placeholder}
-            </span>
+        <Popover.Trigger
+          aria-busy={loading}
+          aria-describedby={control.describedBy}
+          aria-invalid={control.invalid}
+          aria-label={ariaLabel}
+          aria-controls={open ? listboxId : undefined}
+          className={trigger()}
+          data-testid="select-trigger"
+          data-width={width}
+          disabled={disabled || loading}
+          id={control.id}
+          ref={triggerRef}
+          role="combobox"
+        >
+          {leftSection && (
+            <span className="select-left-section shrink-0">{leftSection}</span>
           )}
-        </span>
-        {loading ? (
-          <Loader decorative size="sm" />
-        ) : rightSection ? (
-          <span className="select-right-section shrink-0">{rightSection}</span>
-        ) : showClear ? (
-          // biome-ignore lint/a11y/useSemanticElements: nested button inside the select trigger is invalid HTML
-          <span
-            aria-label="Clear"
+          <span className={triggerValue()} data-testid="select-value">
+            {selectedOption ? (
+              renderValue ? (
+                renderValue(selectedOption)
+              ) : (
+                getLabel(selectedOption, optionLabel)
+              )
+            ) : (
+              <span className="select-placeholder text-muted-foreground">
+                {placeholder}
+              </span>
+            )}
+          </span>
+          {loading ? (
+            <Loader decorative size="sm" />
+          ) : rightSection ? (
+            <span className="select-right-section shrink-0">
+              {rightSection}
+            </span>
+          ) : showClear ? (
+            <span aria-hidden className={clearSpace()} />
+          ) : (
+            <ChevronDown className="select-trigger-icon size-4 shrink-0 text-muted-foreground" />
+          )}
+        </Popover.Trigger>
+        {showClear && (
+          <button
+            aria-label={labels.common.clear}
             className={clearTrigger()}
             data-testid="select-clear"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
+            onClick={() => {
               handleClear()
+              triggerRef.current?.focus()
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                e.stopPropagation()
-                handleClear()
-              }
-            }}
-            onMouseDown={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            role="button"
-            tabIndex={0}
+            type="button"
           >
             <X size={14} />
-          </span>
-        ) : (
-          <ChevronDown className="select-trigger-icon size-4 shrink-0 text-muted-foreground" />
+          </button>
         )}
-      </Popover.Trigger>
+      </div>
       <Popover.Portal container={portalContainer}>
         <Popover.Positioner
           className="select-positioner isolate z-50"
@@ -1139,10 +1210,13 @@ function MultipleSelect<T, I = string, O = I>({
   loading,
   size,
   variant,
+  width = 'full',
   value,
   defaultValue,
   onChange,
   clearable = true,
+  ariaLabel,
+  id,
 }: ResolvedSelectProps<T, I, O> & {
   mode: 'multiple'
 }) {
@@ -1158,12 +1232,15 @@ function MultipleSelect<T, I = string, O = I>({
     checkbox,
     sentinel,
     empty,
+    clearSpace,
     clearTrigger,
     create,
     createLabel,
+    root,
   } = select({
     size,
     variant,
+    width,
   })
 
   const labels = useLabels()
@@ -1277,92 +1354,117 @@ function MultipleSelect<T, I = string, O = I>({
     onChange?.([] as unknown as O[])
   }
 
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  // Form.Field's id, description/error ids and error state, unless given.
+  const control = useFormFieldControl({
+    id,
+  })
+
+  // The trigger's right slot holds one thing: a rightSection wins over it.
   const showClear =
-    clearable && selectedOptions.length > 0 && !disabled && !loading
+    clearable &&
+    selectedOptions.length > 0 &&
+    !disabled &&
+    !loading &&
+    !rightSection
 
   return (
     <Popover.Root onOpenChange={setOpen} open={open}>
-      <Popover.Trigger
-        aria-busy={loading}
-        aria-controls={open ? listboxId : undefined}
-        className={trigger()}
-        data-testid="select-trigger"
-        disabled={disabled || loading}
-        role="combobox"
+      <div
+        className={root()}
+        {...axes(select, {
+          size,
+          variant,
+        })}
+        data-testid="select-root"
       >
-        {leftSection && (
-          <span className="select-left-section shrink-0">{leftSection}</span>
-        )}
-        <span className={triggerValue()} data-testid="select-value">
-          {selectedOptions.length === 0 ? (
-            <span className="select-placeholder text-muted-foreground">
-              {placeholder}
-            </span>
-          ) : (
-            <>
-              {visibleBadges.map((o) => {
-                const key = toKey(getValue(o, optionValue))
-                return (
-                  <Badge key={key} variant="secondary">
-                    {renderValue ? renderValue(o) : getLabel(o, optionLabel)}
-                    <button
-                      aria-label={`Remove ${getLabel(o, optionLabel)}`}
-                      className="select-value-remove pointer-events-auto ml-1 cursor-pointer rounded-full opacity-60 hover:opacity-100"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggle(key, o)
-                      }}
-                      type="button"
-                    >
-                      <X size={10} />
-                    </button>
-                  </Badge>
-                )
-              })}
-              {overflowCount > 0 && (
-                <span className="select-value-overflow shrink-0 text-muted-foreground text-xs">
-                  +{overflowCount}
-                </span>
-              )}
-            </>
+        <Popover.Trigger
+          aria-busy={loading}
+          aria-describedby={control.describedBy}
+          aria-invalid={control.invalid}
+          aria-label={ariaLabel}
+          aria-controls={open ? listboxId : undefined}
+          className={trigger()}
+          data-testid="select-trigger"
+          data-width={width}
+          disabled={disabled || loading}
+          id={control.id}
+          ref={triggerRef}
+          role="combobox"
+        >
+          {leftSection && (
+            <span className="select-left-section shrink-0">{leftSection}</span>
           )}
-        </span>
-        {loading ? (
-          <Loader decorative size="sm" />
-        ) : rightSection ? (
-          <span className="select-right-section shrink-0">{rightSection}</span>
-        ) : showClear ? (
-          // biome-ignore lint/a11y/useSemanticElements: nested button inside the select trigger is invalid HTML
-          <span
-            aria-label="Clear"
+          <span className={triggerValue()} data-testid="select-value">
+            {selectedOptions.length === 0 ? (
+              <span className="select-placeholder text-muted-foreground">
+                {placeholder}
+              </span>
+            ) : (
+              <>
+                {visibleBadges.map((o) => {
+                  const key = toKey(getValue(o, optionValue))
+                  return (
+                    <Badge key={key} variant="secondary">
+                      {renderValue ? renderValue(o) : getLabel(o, optionLabel)}
+                      {/*
+                        A pointer shortcut, not a control: a button here would
+                        sit inside the trigger button. Hidden from assistive
+                        tech and the tab order — the listbox, where the option
+                        is announced as selected, is where the keyboard
+                        removes it.
+                      */}
+                      <span
+                        aria-hidden
+                        className="select-value-remove pointer-events-auto ml-1 cursor-pointer rounded-full opacity-60 hover:opacity-100"
+                        data-testid="select-value-remove"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          toggle(key, o)
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <X size={10} />
+                      </span>
+                    </Badge>
+                  )
+                })}
+                {overflowCount > 0 && (
+                  <span className="select-value-overflow shrink-0 text-muted-foreground text-xs">
+                    +{overflowCount}
+                  </span>
+                )}
+              </>
+            )}
+          </span>
+          {loading ? (
+            <Loader decorative size="sm" />
+          ) : rightSection ? (
+            <span className="select-right-section shrink-0">
+              {rightSection}
+            </span>
+          ) : showClear ? (
+            <span aria-hidden className={clearSpace()} />
+          ) : (
+            <ChevronDown className="select-trigger-icon size-4 shrink-0 text-muted-foreground" />
+          )}
+        </Popover.Trigger>
+        {showClear && (
+          <button
+            aria-label={labels.common.clear}
             className={clearTrigger()}
             data-testid="select-clear"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
+            onClick={() => {
               handleClear()
+              triggerRef.current?.focus()
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                e.stopPropagation()
-                handleClear()
-              }
-            }}
-            onMouseDown={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            role="button"
-            tabIndex={0}
+            type="button"
           >
             <X size={14} />
-          </span>
-        ) : (
-          <ChevronDown className="select-trigger-icon size-4 shrink-0 text-muted-foreground" />
+          </button>
         )}
-      </Popover.Trigger>
+      </div>
       <Popover.Portal container={portalContainer}>
         <Popover.Positioner
           className="select-positioner isolate z-50"

@@ -13,10 +13,16 @@
  * - This is not SegmentedControl: that one answers a form field with exactly
  *   one value and looks like a field. A toggle is a toolbar control, and a
  *   toolbar can have nothing pressed at all
+ * - disabledReason blocks the toggle like `disabled` and says why: it stays
+ *   focusable, presses change nothing, a tooltip shows the reason on hover
+ *   and keyboard focus, and the toggle is described by it (ARC-ERR-9). In a
+ *   group the arrows still reach it: it says aria-disabled only while focused,
+ *   since the group's roving focus skips aria-disabled toggles
  *
  * Implementation:
  * - Base UI Toggle and ToggleGroup
  * - <Toggle ariaLabel="Bold" pressed={bold} onChange={setBold}><Bold /></Toggle>
+ * - <Toggle ariaLabel="Bold" disabledReason="Bold is off in titles"><Bold /></Toggle>
  * - <Toggle.Group mode="multiple" value={marks} onChange={setMarks}>…</Toggle.Group>
  *
  * Dependencies: @base-ui/react/toggle, @base-ui/react/toggle-group
@@ -32,6 +38,7 @@ export type ToggleProps = {
   ariaLabel?: string // required in practice for an icon-only toggle
   defaultPressed?: boolean // uncontrolled initial state
   disabled?: boolean // prevents interaction
+  disabledReason?: string // blocks it, stays focusable, tooltip says why
   onChange?: (pressed: boolean) => void // fires with the new state
   pressed?: boolean // controlled state
   size?: ToggleSize // visual size; default md

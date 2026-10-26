@@ -8,7 +8,9 @@
  *   cross)
  * - Every word comes from the labels, so a translated app translates this too
  * - The check variant still carries the word for assistive technology: an icon
- *   alone tells a screen reader nothing
+ *   alone tells a screen reader nothing. Its icon sits in an inline-flex box,
+ *   so it follows the text alignment around it — centred in a centred table
+ *   cell, not stuck at its left edge
  * - `colored` paints true green and false in the error colour
  * - A null flag is not false — it renders the fallback
  *

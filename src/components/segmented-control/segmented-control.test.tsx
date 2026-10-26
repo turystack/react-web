@@ -202,3 +202,120 @@ describe('SegmentedControl', () => {
     expect(screen.getByTestId('loader')).toBeInTheDocument()
   })
 })
+
+describe('SegmentedControl axes', () => {
+  it('publishes its default size for a theme to select', () => {
+    render(
+      <SegmentedControl optionLabel="name" optionValue="id" options={VIEWS} />,
+    )
+
+    expect(screen.getByRole('radiogroup')).toHaveAttribute('data-size', 'md')
+  })
+
+  it('publishes the size it was given', () => {
+    render(
+      <SegmentedControl
+        optionLabel="name"
+        optionValue="id"
+        options={VIEWS}
+        size="lg"
+      />,
+    )
+
+    expect(screen.getByRole('radiogroup')).toHaveAttribute('data-size', 'lg')
+  })
+})
+
+describe('SegmentedControl optionDisabledReason', () => {
+  const reason = 'Upgrade to plan calendars'
+  const PLANNED = [
+    { id: 1, name: 'List' },
+    { id: 2, lock: reason, name: 'Calendar' },
+    { id: 3, name: 'Board' },
+  ]
+
+  it('renders no wrapper and no description without a reason', () => {
+    render(
+      <SegmentedControl optionLabel="name" optionValue="id" options={VIEWS} />,
+    )
+
+    for (const segment of screen.getAllByRole('radio')) {
+      expect(segment).not.toHaveAttribute('aria-describedby')
+    }
+    expect(
+      document.querySelector('[data-slot="disabled-reason"]'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('the arrows land on a blocked segment but never select it', async () => {
+    const onChange = vi.fn()
+
+    render(
+      <SegmentedControl
+        defaultValue={1}
+        onChange={onChange}
+        optionDisabledReason="lock"
+        optionLabel="name"
+        optionValue="id"
+        options={PLANNED}
+      />,
+    )
+    const calendar = screen.getByRole('radio', { name: 'Calendar' })
+
+    expect(calendar).not.toHaveAttribute('data-disabled')
+
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowRight}')
+
+    expect(calendar).toHaveFocus()
+    expect(calendar).toHaveAttribute('aria-disabled', 'true')
+    expect(calendar).toHaveAccessibleDescription(reason)
+    expect(
+      await screen.findByTestId('disabled-reason-popup'),
+    ).toHaveTextContent(reason)
+
+    await userEvent.keyboard(' ')
+    await userEvent.click(calendar, { pointerEventsCheck: 0 })
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect(calendar).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'List' })).toBeChecked()
+
+    await userEvent.keyboard('{ArrowRight}')
+    expect(onChange).toHaveBeenCalledWith(3)
+  })
+})
+
+describe('SegmentedControl optionDisabledReason, edge cases', () => {
+  const reason = 'Upgrade to plan calendars'
+  const options = (blocked: boolean) => [
+    { id: 1, name: 'List' },
+    { id: 2, lock: blocked ? reason : undefined, name: 'Calendar' },
+  ]
+
+  it('keeps focus when a reason arrives on the focused segment', async () => {
+    const tree = (blocked: boolean) => (
+      <SegmentedControl
+        defaultValue={1}
+        optionDisabledReason="lock"
+        optionLabel="name"
+        optionValue="id"
+        options={options(blocked)}
+      />
+    )
+    const { rerender } = render(tree(false))
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowRight}')
+    const calendar = () => screen.getByRole('radio', { name: 'Calendar' })
+    expect(calendar()).toHaveFocus()
+
+    rerender(tree(true))
+
+    expect(calendar()).toHaveFocus()
+    expect(calendar()).toHaveAccessibleDescription(reason)
+
+    rerender(tree(false))
+
+    expect(calendar()).toHaveFocus()
+  })
+})

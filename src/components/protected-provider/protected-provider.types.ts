@@ -15,13 +15,20 @@
  * - `organization:manage` and `workspace:manage` answer yes to everything. The
  *   UI cannot see the scope conditions the API attaches to them, so it errs
  *   towards showing; the API is what refuses
+ * - `loading` says the list is not known yet (the profile query is in
+ *   flight). Meanwhile nothing is answered as denied: `Protected` renders no
+ *   guarded node and no fallback, and a renderer gets `loading` instead of a
+ *   reason — so a screen never flashes "You do not have permission" at
+ *   someone who has it. Wire it to a query's `isLoading`, not `isPending`: a
+ *   disabled query (no session yet) stays pending forever, and so would
+ *   every guarded control
  * - This is not a security boundary. It shapes the UI; the API authorises
  *
  * Implementation:
  * - Permissions are expanded once per change and answered from a Set
  * - An app types its ids by augmenting TuryPermissionRegistry with the union
  *   its generated client publishes; without that, PermissionId is plain string
- * - <ProtectedProvider permissions={profile.permissions}>
+ * - <ProtectedProvider loading={profile.isLoading} permissions={profile.data?.permissions ?? []}>
  *
  * Dependencies: none
  */
@@ -62,15 +69,20 @@ export type ProtectedMode = 'all' | 'any'
 
 export type ProtectedState = {
   enabled: boolean // whether the permissions asked for are held
+  loading: boolean // permissions not known yet; nothing is denied meanwhile
+  reason?: string // why not, when not; feed it to a control's disabledReason
 }
 
 export type PermissionsContextValue = {
   /** Answers a permission question without rendering anything. */
   can: (permissionIds: PermissionId[], mode?: ProtectedMode) => boolean
+  /** The permissions are not known yet; nothing should read as denied. */
+  loading: boolean
   /** The ids the user holds, as they were given. */
   permissions: PermissionId[]
 }
 
 export type ProtectedProviderProps = PropsWithChildren<{
+  loading?: boolean // permissions not known yet; default false
   permissions: PermissionId[] // ids the signed-in user holds
 }>

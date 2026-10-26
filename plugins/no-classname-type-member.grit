@@ -1,0 +1,17 @@
+// PROP-1 / STY-1, react-web binding — `className` is never a public prop.
+//
+// Same law as `frontend-config/plugins/no-classname-prop.grit`, matched on the
+// syntax node instead of a text snippet. The shared snippet `className?: $type`
+// misses a required `className: string` and an optional one followed by `;`
+// inside an inline object (`{ className?: string; content?: string }`), which
+// is exactly how a class sneaks into a nested config such as `label={{ … }}`.
+// This matches every property signature named `className` — optional or
+// required, readonly, quoted, in a type alias, an interface or an inline
+// object at any depth.
+engine biome(1.0)
+language js(typescript)
+
+TsPropertySignatureTypeMember(name = $name) as $member where {
+  $name <: r"^['\"]?className['\"]?$",
+  register_diagnostic(span = $member, message = "PROP-1: className is not a public prop — expose a semantic variant instead.")
+}

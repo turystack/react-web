@@ -32,8 +32,9 @@ describe('Stat', () => {
 
     expect(screen.getByTestId('stat-trend')).toHaveTextContent('+12%')
     expect(
-      screen.getByTestId('stat-trend').querySelector('span')?.className,
-    ).toContain('text-green-600')
+      screen.getByTestId('stat-trend').querySelector('.formatter-text-value')
+        ?.className,
+    ).toContain('text-success')
   })
 
   it('holds the shape while the number is on its way', () => {
@@ -50,5 +51,63 @@ describe('Stat', () => {
     render(<Stat hint="Last 30 days" label="Revenue" value="R$ 1.280,00" />)
 
     expect(screen.getByTestId('stat-hint')).toHaveTextContent('Last 30 days')
+  })
+
+  it('keeps the trend on the figure line by default, free to wrap under it', () => {
+    render(<Stat label="Revenue" trend="+12%" value="R$ 1.280.000,00" />)
+
+    const figure = screen.getByTestId('stat-value')
+    const trend = screen.getByTestId('stat-trend')
+
+    expect(figure).toContainElement(trend)
+    expect(trend).toHaveAttribute('data-placement', 'inline')
+    // A long value in a narrow tile sends the delta to the next line instead
+    // of running it past the edge.
+    expect(figure.className).toContain('flex-wrap')
+    expect(figure.className).toContain('min-w-0')
+  })
+
+  it('puts the trend on its own line under the figure when asked', () => {
+    render(
+      <Stat
+        hint="Last 30 days"
+        label="Revenue"
+        trend="+12%"
+        trendPlacement="below"
+        value="R$ 1.280.000,00"
+      />,
+    )
+
+    const figure = screen.getByTestId('stat-value')
+    const trend = screen.getByTestId('stat-trend')
+
+    expect(figure).not.toContainElement(trend)
+    expect(trend).toHaveAttribute('data-placement', 'below')
+    // Label, figure, trend, hint — the reading order the tile paints.
+    expect(
+      Array.from(screen.getByTestId('stat').children).map((node) =>
+        node.getAttribute('data-testid'),
+      ),
+    ).toEqual(['stat-label', 'stat-value', 'stat-trend', 'stat-hint'])
+  })
+
+  it('renders no trend below while loading', () => {
+    render(
+      <Stat
+        label="Revenue"
+        loading
+        trend="+12%"
+        trendPlacement="below"
+        value="—"
+      />,
+    )
+
+    expect(screen.queryByTestId('stat-trend')).not.toBeInTheDocument()
+  })
+
+  it('shrinks with its cell instead of forcing the track wider', () => {
+    render(<Stat label="Revenue" value="R$ 1.280,00" />)
+
+    expect(screen.getByTestId('stat').className).toContain('min-w-0')
   })
 })

@@ -21,6 +21,9 @@ export function FileSizeText(props: FileSizeTextProps) {
     return (
       <FormatterText
         {...props}
+        published={{
+          'data-variant': props.variant ?? 'decimal',
+        }}
         testId="file-size-text"
         text={props.fallback ?? DEFAULT_FALLBACK}
       />
@@ -38,5 +41,14 @@ export function FileSizeText(props: FileSizeTextProps) {
     minimumFractionDigits: 0,
   }).format(amount)} ${unit}`
 
-  return <FormatterText {...props} testId="file-size-text" text={text} />
+  return (
+    <FormatterText
+      {...props}
+      published={{
+        'data-variant': props.variant ?? 'decimal',
+      }}
+      testId="file-size-text"
+      text={text}
+    />
+  )
 }

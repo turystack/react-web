@@ -101,9 +101,9 @@ describe('MoneyText', () => {
 
     const [credit, debit, zero, plain] = screen.getAllByTestId('money-text')
 
-    expect(credit.className).toContain('text-green-600')
+    expect(credit.className).toContain('text-success')
     expect(debit.className).toContain('text-destructive')
-    expect(zero.className).not.toContain('text-green-600')
+    expect(zero.className).not.toContain('text-success')
     expect(plain.className).not.toContain('text-destructive')
   })
 
@@ -181,5 +181,81 @@ describe('MoneyText range', () => {
     render(<MoneyText mode="range" value={null} />)
 
     expect(screen.getByTestId('money-text')).toHaveTextContent('—')
+  })
+})
+
+describe('MoneyText inline in a sentence', () => {
+  it('takes the size, colour and weight of the text around it', () => {
+    render(
+      <MoneyText inheritColor size="inherit" value={4990} weight="inherit" />,
+    )
+
+    const rendered = screen.getByTestId('money-text')
+    expect(rendered).toHaveClass('text-[length:inherit]')
+    expect(rendered.className).not.toMatch(
+      /\btext-(base|foreground|muted-foreground)\b|\bfont-/,
+    )
+  })
+
+  it('still paints its sign over an inherited colour', () => {
+    render(<MoneyText colored inheritColor size="inherit" value={-4990} />)
+
+    expect(screen.getByTestId('money-text')).toHaveClass('text-destructive')
+  })
+
+  it('carries the inherited look into a range', () => {
+    render(
+      <MoneyText
+        inheritColor
+        mode="range"
+        size="inherit"
+        value={{ from: 1000, to: 5000 }}
+      />,
+    )
+
+    const rendered = screen.getByTestId('money-text')
+    expect(rendered).toHaveClass('text-[length:inherit]')
+    expect(rendered).not.toHaveClass('text-base', 'text-foreground')
+  })
+})
+
+describe('MoneyText axes', () => {
+  it('publishes its default variant for a theme to select', () => {
+    render(<MoneyText value={1200} />)
+
+    expect(
+      screen.getByTestId('money-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'standard')
+  })
+
+  it('publishes the variant it was given', () => {
+    render(<MoneyText value={1200} variant="accounting" />)
+
+    expect(
+      screen.getByTestId('money-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'accounting')
+  })
+
+  it('publishes it on a range too', () => {
+    render(
+      <MoneyText mode="range" value={{ from: 100, to: 200 }} variant="code" />,
+    )
+
+    expect(
+      screen.getByTestId('money-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'code')
+  })
+})
+
+describe('MoneyText axes, one meaning per element', () => {
+  it('keeps the format choice off the value, whose variant is its colour', () => {
+    render(<MoneyText value={1200} />)
+
+    const value = screen.getByTestId('money-text')
+    expect(value.closest('.formatter-text')).toHaveAttribute(
+      'data-variant',
+      'standard',
+    )
+    expect(value).toHaveAttribute('data-variant', 'default')
   })
 })

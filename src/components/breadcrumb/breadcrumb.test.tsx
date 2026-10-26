@@ -2,6 +2,8 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { LabelsProvider } from '@/components/labels-provider'
+
 import { Breadcrumb } from './breadcrumb'
 
 describe('Breadcrumb', () => {
@@ -17,7 +19,25 @@ describe('Breadcrumb', () => {
     )
 
     expect(
-      screen.getByRole('navigation', { name: 'breadcrumb' }),
+      screen.getByRole('navigation', { name: 'Breadcrumb' }),
+    ).toBeInTheDocument()
+  })
+
+  it('takes the landmark name from the labels provider', () => {
+    render(
+      <LabelsProvider labels={{ breadcrumb: { label: 'Trilha' } }}>
+        <Breadcrumb>
+          <Breadcrumb.List>
+            <Breadcrumb.Item>
+              <Breadcrumb.Page>Current</Breadcrumb.Page>
+            </Breadcrumb.Item>
+          </Breadcrumb.List>
+        </Breadcrumb>
+      </LabelsProvider>,
+    )
+
+    expect(
+      screen.getByRole('navigation', { name: 'Trilha' }),
     ).toBeInTheDocument()
   })
 

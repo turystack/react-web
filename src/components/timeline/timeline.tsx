@@ -1,7 +1,11 @@
-import { createContext, type PropsWithChildren, useContext } from 'react'
+import { createContext, type PropsWithChildren, useContext, useId } from 'react'
 import { tv } from 'tailwind-variants'
 
-import type { TimelineItemProps, TimelineProps } from './timeline.types'
+import type {
+  TimelineGroupProps,
+  TimelineItemProps,
+  TimelineProps,
+} from './timeline.types'
 
 export const styles = tv({
   defaultVariants: {
@@ -10,8 +14,15 @@ export const styles = tv({
   slots: {
     body: 'timeline-body flex min-w-0 flex-1 flex-col gap-1 pb-6',
     connector:
-      'timeline-connector absolute top-6 bottom-0 left-[7px] w-px bg-border',
+      'timeline-connector absolute top-6 bottom-0 left-1.75 w-px bg-border',
     content: 'timeline-content text-muted-foreground text-sm',
+    // A <fieldset> (a group, like the ARIA role it replaces) keeps a
+    // min-content floor and its own border and padding; this resets them.
+    group:
+      'timeline-group m-0 flex min-w-0 flex-col border-0 p-0 pb-6 last:pb-0',
+    groupItems: 'timeline-group-items flex flex-col',
+    groupLabel:
+      'timeline-group-label mb-3 font-medium text-muted-foreground text-xs uppercase tracking-wide',
     item: 'timeline-item relative flex gap-3 last:[&_.timeline-connector]:hidden last:[&_.timeline-body]:pb-0',
     marker:
       'timeline-marker relative z-10 mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border-2 bg-background [&_svg]:size-3',
@@ -23,6 +34,8 @@ export const styles = tv({
     compact: {
       true: {
         body: 'pb-3',
+        group: 'pb-3',
+        groupLabel: 'mb-2',
       },
     },
     status: {
@@ -33,7 +46,7 @@ export const styles = tv({
         marker: 'border-primary bg-primary text-primary-foreground',
       },
       error: {
-        marker: 'border-destructive bg-destructive text-white',
+        marker: 'border-destructive bg-destructive text-destructive-foreground',
         title: 'text-destructive',
       },
       pending: {
@@ -107,7 +120,41 @@ function TimelineItem({
   )
 }
 
+/**
+ * A period's entries under their date heading. The label is a real heading so
+ * the months are landmarks a screen reader can jump between, and it names the
+ * group, so an entry read on its own still says which period it is in.
+ */
+function TimelineGroup({
+  children,
+  headingLevel = 3,
+  label,
+}: PropsWithChildren<TimelineGroupProps>) {
+  const compact = useContext(CompactContext)
+  const labelId = useId()
+  const { group, groupItems, groupLabel } = styles({
+    compact,
+  })
+  const Heading = `h${headingLevel}` as const
+
+  return (
+    // A <fieldset> is the native group: the same role="group" named by the
+    // heading, with no ARIA standing in for an element that exists.
+    <fieldset
+      aria-labelledby={labelId}
+      className={group()}
+      data-testid="timeline-group"
+    >
+      <Heading className={groupLabel()} id={labelId}>
+        {label}
+      </Heading>
+      <div className={groupItems()}>{children}</div>
+    </fieldset>
+  )
+}
+
 const Timeline = Object.assign(TimelineRoot, {
+  Group: TimelineGroup,
   Item: TimelineItem,
 })
 

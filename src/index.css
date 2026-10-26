@@ -21,8 +21,14 @@
     --muted-foreground: oklch(0.556 0 0);
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
+    --destructive: oklch(0.49 0.2 27.325);
     --destructive-foreground: oklch(0.985 0 0);
+    --success: oklch(0.527 0.154 150.069);
+    --success-foreground: oklch(0.985 0 0);
+    --warning: oklch(0.555 0.163 48.998);
+    --warning-foreground: oklch(0.985 0 0);
+    --info: oklch(0.546 0.245 262.881);
+    --info-foreground: oklch(0.985 0 0);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
     --ring: oklch(0.708 0 0);
@@ -39,6 +45,41 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    /*
+     * The scrim behind every modal surface (Modal, Sheet, Confirm,
+     * SpotlightSearch). Light: a white dialog over a half-dimmed page reads at
+     * ~4:1. The blur is what quiets the page's own content in either scheme.
+     */
+    --overlay: oklch(0 0 0 / 50%);
+    --overlay-blur: 8px;
+    /*
+     * Elevation. The `shadow-*` utilities read these, so a theme that lifts
+     * or flattens surfaces sets a token instead of overriding every slot that
+     * casts a shadow. Same values in both schemes: dark surfaces part from the
+     * page by colour, and a lighter shadow would read as a glow.
+     */
+    --elevation-2xs: 0 1px rgb(0 0 0 / 0.05);
+    --elevation-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --elevation-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --elevation-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --elevation-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --elevation-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    --elevation-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    /*
+     * Categorical hues for labels that sort, not signal (Badge's orange, pink,
+     * purple, teal). Each pair is a tint and the text that holds on it; a
+     * theme that recolours a category sets both.
+     */
+    --category-orange: oklch(95.4% 0.038 75.164);
+    --category-orange-foreground: oklch(55.3% 0.195 38.402);
+    --category-pink: oklch(94.8% 0.028 342.258);
+    --category-pink-foreground: oklch(52.5% 0.223 3.958);
+    --category-purple: oklch(94.6% 0.033 307.174);
+    --category-purple-foreground: oklch(49.6% 0.265 301.924);
+    --category-teal: oklch(95.3% 0.051 180.801);
+    --category-teal-foreground: oklch(51.1% 0.096 186.391);
+    /* The slider's thumb: white in both schemes, it sits on the track. */
+    --control-thumb: #fff;
 }
 
 .dark {
@@ -48,7 +89,7 @@
     --card-foreground: oklch(0.985 0 0);
     --popover: oklch(0.205 0 0);
     --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
+    --primary: oklch(0.985 0 0);
     --primary-foreground: oklch(0.205 0 0);
     --secondary: oklch(0.269 0 0);
     --secondary-foreground: oklch(0.985 0 0);
@@ -56,10 +97,20 @@
     --muted-foreground: oklch(0.708 0 0);
     --accent: oklch(0.269 0 0);
     --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --destructive-foreground: oklch(0.985 0 0);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
+    --destructive: oklch(0.75 0.191 22.216);
+    --destructive-foreground: oklch(0.145 0 0);
+    --success: oklch(0.723 0.219 149.579);
+    --success-foreground: oklch(0.145 0 0);
+    --warning: oklch(0.828 0.189 84.429);
+    --warning-foreground: oklch(0.145 0 0);
+    --info: oklch(0.707 0.165 254.624);
+    --info-foreground: oklch(0.145 0 0);
+    /*
+     * Opaque, not a white alpha: the same edge on the page and on a card,
+     * where a 10% white reads lighter over the card's own grey.
+     */
+    --border: oklch(0.269 0 0);
+    --input: oklch(0.269 0 0);
     --ring: oklch(0.556 0 0);
     --chart-1: oklch(0.488 0.243 264.376);
     --chart-2: oklch(0.696 0.17 162.48);
@@ -74,11 +125,45 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    /*
+     * A black scrim cannot part a near-black dialog from a near-black page —
+     * the surface stays ~1.15:1 against it at any alpha. What it can do is
+     * silence the page: at 70% (plus the blur) page text drops from ~19:1 to
+     * ~2.4:1 against its own background, so only the dialog still reads.
+     */
+    --overlay: oklch(0 0 0 / 70%);
+    /* Dark tints the hue at 15% over the surface instead of a pale fill. */
+    --category-orange: color-mix(in oklab, oklch(70.5% 0.213 47.604) 15%, transparent);
+    --category-orange-foreground: oklch(83.7% 0.128 66.29);
+    --category-pink: color-mix(in oklab, oklch(65.6% 0.241 354.308) 15%, transparent);
+    --category-pink-foreground: oklch(82.3% 0.12 346.018);
+    --category-purple: color-mix(in oklab, oklch(62.7% 0.265 303.9) 15%, transparent);
+    --category-purple-foreground: oklch(82.7% 0.119 306.383);
+    --category-teal: color-mix(in oklab, oklch(70.4% 0.14 182.503) 15%, transparent);
+    --category-teal-foreground: oklch(85.5% 0.138 181.071);
+}
+
+/*
+ * Not inline: the `font-*` utilities then read the variable, so a theme sets
+ * `--font-sans` or `--font-heading` and every slot follows. Inline, the name
+ * is written into each utility and only a slot-by-slot override reaches it.
+ */
+@theme {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+    /*
+     * Type steps under Tailwind's `text-xs`. `2xs` is a t-shirt name, so it
+     * is a plain `text-2xs`; the other two are read as
+     * `text-(length:--text-compact)`, because tailwind-merge takes an unknown
+     * `text-<name>` for a colour and drops it beside `text-muted-foreground`.
+     * None sets a line height: the literals they replace did not either.
+     */
+    --text-2xs: 0.625rem;     /* micro labels: small badge, indicator count, kbd */
+    --text-caption: 0.7rem;   /* the small stepper's description */
+    --text-compact: 0.8rem;   /* compact controls: small button, filter chip, calendar labels */
 }
 
 @theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -96,6 +181,13 @@
     --color-input: var(--input);
     --color-border: var(--border);
     --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
+    --color-info: var(--info);
+    --color-info-foreground: var(--info-foreground);
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
     --color-muted-foreground: var(--muted-foreground);
@@ -110,6 +202,17 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
+    --color-overlay: var(--overlay);
+    --color-category-orange: var(--category-orange);
+    --color-category-orange-foreground: var(--category-orange-foreground);
+    --color-category-pink: var(--category-pink);
+    --color-category-pink-foreground: var(--category-pink-foreground);
+    --color-category-purple: var(--category-purple);
+    --color-category-purple-foreground: var(--category-purple-foreground);
+    --color-category-teal: var(--category-teal);
+    --color-category-teal-foreground: var(--category-teal-foreground);
+    --color-control-thumb: var(--control-thumb);
+    --blur-overlay: var(--overlay-blur);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -117,6 +220,13 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    --shadow-2xs: var(--elevation-2xs);
+    --shadow-xs: var(--elevation-xs);
+    --shadow-sm: var(--elevation-sm);
+    --shadow-md: var(--elevation-md);
+    --shadow-lg: var(--elevation-lg);
+    --shadow-xl: var(--elevation-xl);
+    --shadow-2xl: var(--elevation-2xl);
 }
 
 @layer base {
@@ -126,7 +236,60 @@
   body {
     @apply bg-background text-foreground;
     }
+  /*
+   * Through the variable, so the page's text follows a theme that sets
+   * `--font-sans` on `:root`, exactly as the `font-*` utilities do (the font
+   * tokens live in the plain `@theme` above, not `@theme inline`).
+   */
   html {
-    @apply font-sans;
+    font-family: var(--font-sans);
     }
+}
+
+@layer components {
+  /*
+   * LoadingOverlay paints no veil; the content under it fades instead. Every
+   * direct child of the overlay's host but the overlay itself — so the spinner
+   * stays at full strength over half-strength content, on any surface.
+   */
+  :where(:has(> .loading-overlay-root)) > :not(.loading-overlay-root) {
+    transition: opacity 150ms ease;
+  }
+
+  :where(:has(> .loading-overlay-root[aria-busy="true"]))
+    > :not(.loading-overlay-root) {
+    opacity: 0.5;
+  }
+}
+
+/*
+ * Toast. Sonner injects its own stylesheet, unlayered, when it loads, and an
+ * unlayered rule beats every `@layer` rule whatever its specificity — so no
+ * utility on a slot can move what sonner sets. These rules sit outside any
+ * layer, one attribute more specific than sonner's own selectors (which top
+ * out at three), so they win whichever stylesheet loads last. A theme reaches
+ * them with the same selector, no `!important` needed.
+ */
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] .toast-description {
+  @apply font-medium text-sm text-muted-foreground;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"]:is(.toast-error, .toast-info, .toast-success, .toast-warning) {
+  @apply border-l-4;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"].toast-error {
+  @apply border-l-destructive;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"].toast-info {
+  @apply border-l-info;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"].toast-success {
+  @apply border-l-success;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"].toast-warning {
+  @apply border-l-warning;
 }

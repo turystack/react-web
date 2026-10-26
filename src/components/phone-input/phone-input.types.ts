@@ -10,13 +10,7 @@ export type PhoneValue = {
 
 export type PhoneInputProps = Omit<
   InputProps,
-  | 'onChange'
-  | 'value'
-  | 'defaultValue'
-  | 'type'
-  | 'leftSection'
-  | 'leftSectionWidth'
-  | 'rootClassName'
+  'onChange' | 'value' | 'defaultValue' | 'leftSection' | 'leftSectionWidth'
 > & {
   value?: PhoneValue | null
   defaultValue?: PhoneValue | null

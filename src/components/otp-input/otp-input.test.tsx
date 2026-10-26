@@ -103,6 +103,42 @@ describe('OTPInput', () => {
     expect(field()).toHaveValue('')
   })
 
+  it('has no accessible name unless it is given one', () => {
+    render(<OTPInput />)
+
+    expect(screen.getByRole('textbox')).not.toHaveAccessibleName()
+    expect(field()).not.toHaveAttribute('id')
+  })
+
+  it('is named by ariaLabel', () => {
+    render(<OTPInput ariaLabel="Verification code" />)
+
+    expect(
+      screen.getByRole('textbox', {
+        name: 'Verification code',
+      }),
+    ).toBe(field())
+  })
+
+  it('is named by a label that points at its id', async () => {
+    render(
+      <>
+        <label htmlFor="otp">Code from the SMS</label>
+        <OTPInput id="otp" />
+      </>,
+    )
+
+    const input = screen.getByRole('textbox', {
+      name: 'Code from the SMS',
+    })
+
+    expect(input).toHaveAttribute('id', 'otp')
+
+    await userEvent.click(screen.getByText('Code from the SMS'))
+
+    expect(input).toHaveFocus()
+  })
+
   it('shows the caret on the cell being filled', async () => {
     render(<OTPInput />)
 
@@ -127,3 +163,17 @@ describe.each(['sm', 'md', 'lg'] as OTPInputSize[])(
     })
   },
 )
+
+describe('OTPInput axes', () => {
+  it('publishes its default size for a theme to select', () => {
+    render(<OTPInput />)
+
+    expect(field()).toHaveAttribute('data-size', 'md')
+  })
+
+  it('publishes the size it was given', () => {
+    render(<OTPInput size="lg" />)
+
+    expect(field()).toHaveAttribute('data-size', 'lg')
+  })
+})

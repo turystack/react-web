@@ -22,6 +22,10 @@
  *
  * Implementation:
  * - Multi-input architecture (one <input role="spinbutton"> per segment)
+ * - The segments sit in a <fieldset> (the native role="group", no legend)
+ *   that carries ariaLabel, aria-invalid, aria-describedby and id; onKeyDown
+ *   and onClick receive the group's events; text-field-only Input props are
+ *   omitted from the contract
  * - Pure helpers in time-input.utils.ts (parse/format/clamp/paste)
  * - minTime/maxTime expressed in the same format as value (HH:MM or HH:MM:SS)
  * - <TimeInput value={time} onChange={setTime} minTime="08:00" maxTime="22:00" />
@@ -33,7 +37,22 @@ import type { InputProps } from '@/components/input/input.types'
 
 export type TimeInputProps = Omit<
   InputProps,
-  'value' | 'defaultValue' | 'onChange' | 'type' | 'debounce' | 'placeholder'
+  // The field is a group of segment inputs, not one native <input>: the
+  // text-field attributes (placeholder, length, autofill, keyboard hint) and
+  // the form-submission ones (name, form, required) have nothing to land on.
+  | 'value'
+  | 'defaultValue'
+  | 'onChange'
+  | 'debounce'
+  | 'placeholder'
+  | 'name'
+  | 'form'
+  | 'autoComplete'
+  | 'autoFocus'
+  | 'inputMode'
+  | 'maxLength'
+  | 'minLength'
+  | 'required'
 > & {
   value?: string | null // controlled value (HH:MM or HH:MM:SS, null clears)
   defaultValue?: string | null // uncontrolled initial value

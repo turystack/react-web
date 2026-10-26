@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { EditableText } from './editable-text'
 
@@ -459,5 +459,169 @@ describe('EditableText stable layout', () => {
     await userEvent.keyboard('{Escape}')
 
     expect(screen.getByTestId('editable-text-display')).toHaveFocus()
+  })
+})
+
+describe.each([
+  ['flow', 'click'],
+  ['flow', 'doubleClick'],
+  ['stable', 'click'],
+  ['stable', 'doubleClick'],
+  ['stable', 'icon'],
+] as const)(
+  'EditableText copyable, %s layout, %s trigger',
+  (layout, trigger) => {
+    let writeText: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      writeText = vi.fn().mockResolvedValue(undefined)
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText },
+      })
+    })
+
+    it('puts the copy control beside the value, not inside its button', () => {
+      render(
+        <EditableText copyable layout={layout} trigger={trigger} value="Ada" />,
+      )
+
+      const display = screen.getByTestId('editable-text-display')
+      const copy = screen.getByRole('button', { name: 'Copy' })
+
+      expect(display).not.toContainElement(copy)
+      expect(display.querySelector('button')).toBeNull()
+    })
+
+    it('copies the value without opening the editor', async () => {
+      const onEditingChange = vi.fn()
+      render(
+        <EditableText
+          copyable
+          layout={layout}
+          onEditingChange={onEditingChange}
+          trigger={trigger}
+          value="Ada"
+        />,
+      )
+
+      const copy = screen.getByRole('button', { name: 'Copy' })
+      await userEvent.click(copy)
+      await userEvent.dblClick(copy)
+
+      expect(writeText).toHaveBeenCalledWith('Ada')
+      expect(
+        screen.queryByTestId('editable-text-input'),
+      ).not.toBeInTheDocument()
+      expect(onEditingChange).not.toHaveBeenCalled()
+    })
+
+    it('copies from the keyboard without opening the editor', async () => {
+      render(
+        <EditableText copyable layout={layout} trigger={trigger} value="Ada" />,
+      )
+
+      screen.getByRole('button', { name: 'Copy' }).focus()
+      await userEvent.keyboard('{Enter}')
+
+      expect(writeText).toHaveBeenCalledWith('Ada')
+      expect(
+        screen.queryByTestId('editable-text-input'),
+      ).not.toBeInTheDocument()
+    })
+  },
+)
+
+describe('EditableText copyable edges', () => {
+  it('copies beside the pencil in flow layout without opening the editor', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    render(<EditableText copyable trigger="icon" value="Ada" />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Copy' }))
+
+    expect(writeText).toHaveBeenCalledWith('Ada')
+    expect(screen.queryByTestId('editable-text-input')).not.toBeInTheDocument()
+  })
+
+  it('offers no copy control unless asked', () => {
+    render(<EditableText value="Ada" />)
+
+    expect(
+      screen.queryByRole('button', { name: 'Copy' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('hides the copy control while the editor is open', async () => {
+    render(<EditableText copyable layout="stable" value="Ada" />)
+
+    await userEvent.click(screen.getByTestId('editable-text-display'))
+
+    expect(screen.getByTestId('editable-text-input')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Copy' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the value opening the editor when copy is on', async () => {
+    render(<EditableText copyable value="Ada" />)
+
+    await userEvent.click(screen.getByTestId('editable-text-value'))
+
+    expect(screen.getByTestId('editable-text-input')).toBeInTheDocument()
+  })
+
+  it('makes room for copy and the pencil in the stable box', () => {
+    render(
+      <>
+        <EditableText copyable layout="stable" value="Ada" />
+        <EditableText copyable layout="stable" trigger="icon" value="Ada" />
+      </>,
+    )
+
+    const [alone, withPencil] = screen.getAllByTestId('editable-text-display')
+
+    expect(alone).toHaveClass('pr-9')
+    expect(withPencil).toHaveClass('pr-18')
+  })
+})
+
+describe('EditableText axes', () => {
+  it('publishes its default size for a theme to select', () => {
+    render(
+      <>
+        <EditableText value="Ada" />
+        <EditableText layout="stable" value="Grace" />
+      </>,
+    )
+
+    const [flow, stable] = screen.getAllByTestId('editable-text')
+    expect(flow).toHaveAttribute('data-size', 'base')
+    expect(stable).toHaveAttribute('data-size', 'md')
+  })
+
+  it('publishes the size it was given, open or at rest', async () => {
+    render(
+      <>
+        <EditableText size="lg" value="Ada" />
+        <EditableText size="sm" trigger="icon" value="Grace" />
+        <EditableText layout="stable" size="lg" value="Linus" />
+      </>,
+    )
+
+    const [flow, icon, stable] = screen.getAllByTestId('editable-text')
+    expect(flow).toHaveAttribute('data-size', 'lg')
+    expect(icon).toHaveAttribute('data-size', 'sm')
+    expect(stable).toHaveAttribute('data-size', 'lg')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ada' }))
+
+    expect(screen.getAllByTestId('editable-text')[0]).toHaveAttribute(
+      'data-size',
+      'lg',
+    )
   })
 })

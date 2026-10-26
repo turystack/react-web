@@ -13,5 +13,11 @@ export function Protected({
     return <>{(children as ProtectedRenderer)(state)}</>
   }
 
+  // While the permissions load, neither the node nor its fallback: either one
+  // could be the wrong answer, and the fallback is usually "no access".
+  if (state.loading) {
+    return null
+  }
+
   return <>{state.enabled ? children : fallback}</>
 }

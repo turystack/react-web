@@ -571,7 +571,12 @@ describe('DateRangeInput disabled', () => {
       />,
     )
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(field())
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Open calendar',
+      }),
+    )
 
     expect(
       screen.queryByRole('button', {
@@ -718,5 +723,242 @@ describe('DateRangeInput labels', () => {
         name: 'Discard',
       }),
     ).toBeInTheDocument()
+  })
+})
+
+describe('DateRangeInput onClick', () => {
+  it('calls the consumer onClick and still opens the picker', async () => {
+    const onClick = vi.fn()
+    render(<DateRangeInput ariaLabel="Period" onClick={onClick} />)
+
+    await userEvent.click(screen.getByRole('textbox', { name: 'Period' }))
+
+    expect(onClick).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('stays shut while disabled even with a consumer onClick', () => {
+    render(<DateRangeInput ariaLabel="Period" disabled onClick={vi.fn()} />)
+
+    screen.getByRole('textbox', { name: 'Period' }).click()
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+const INTERACTIVE =
+  'button, input, select, textarea, a[href], [role="button"], [tabindex]'
+
+describe('DateRangeInput structure', () => {
+  it('nests no interactive element inside another', () => {
+    const { container } = render(
+      <DateRangeInput
+        value={{
+          from: jan10,
+          to: jan20,
+        }}
+      />,
+    )
+
+    const controls = [...container.querySelectorAll(INTERACTIVE)]
+    expect(controls.length).toBeGreaterThanOrEqual(3)
+    for (const control of controls) {
+      expect(control.parentElement?.closest(INTERACTIVE)).toBeNull()
+    }
+  })
+
+  it('has no role="button" wrapper around the field', () => {
+    render(<DateRangeInput />)
+
+    expect(field().closest('[role="button"]')).toBeNull()
+  })
+
+  it('puts the calendar button and the clear button on either side of the field', () => {
+    render(
+      <DateRangeInput
+        value={{
+          from: jan10,
+          to: jan20,
+        }}
+      />,
+    )
+
+    const openButton = screen.getByRole('button', { name: 'Open calendar' })
+    const clear = screen.getByRole('button', { name: 'Clear' })
+
+    expect(openButton.tagName).toBe('BUTTON')
+    expect(clear.tagName).toBe('BUTTON')
+    expect(openButton).toHaveAttribute('type', 'button')
+    expect(openButton.contains(field())).toBe(false)
+    expect(clear.contains(field())).toBe(false)
+    expect(openButton.contains(clear)).toBe(false)
+  })
+
+  it('disables the calendar button with the field', () => {
+    render(<DateRangeInput disabled />)
+
+    expect(screen.getByRole('button', { name: 'Open calendar' })).toBeDisabled()
+  })
+
+  it('tells assistive technology whether the picker is open', async () => {
+    render(<DateRangeInput />)
+
+    const openButton = screen.getByRole('button', { name: 'Open calendar' })
+    expect(openButton).toHaveAttribute('aria-expanded', 'false')
+
+    await userEvent.click(openButton)
+
+    expect(openButton).toHaveAttribute('aria-expanded', 'true')
+    expect(apply()).toBeInTheDocument()
+  })
+
+  it('rings the field while the picker is on screen', async () => {
+    render(<DateRangeInput />)
+
+    expect(field()).not.toHaveClass('ring-3')
+
+    await open()
+
+    expect(field()).toHaveClass('ring-3')
+  })
+
+  it('takes the calendar button name from the labels the app provides', () => {
+    render(
+      <TuryProvider labels={{ dateInput: { open: 'Abrir calendário' } }}>
+        <DateRangeInput />
+      </TuryProvider>,
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Abrir calendário' }),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('DateRangeInput keyboard', () => {
+  it('reaches the calendar button, the field and the clear button in order', async () => {
+    render(
+      <DateRangeInput
+        value={{
+          from: jan10,
+          to: jan20,
+        }}
+      />,
+    )
+
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'Open calendar' })).toHaveFocus()
+
+    await userEvent.tab()
+    expect(field()).toHaveFocus()
+
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'Clear' })).toHaveFocus()
+  })
+
+  it.each([
+    ['Enter', '{Enter}'],
+    ['Space', ' '],
+  ])('opens the picker with %s on the calendar button', async (_key, keys) => {
+    render(<DateRangeInput />)
+
+    await userEvent.tab()
+    await userEvent.keyboard(keys)
+
+    expect(
+      await screen.findByRole('button', { name: 'Apply' }),
+    ).toBeInTheDocument()
+  })
+
+  it('clears with Enter on the clear button without opening the picker', async () => {
+    const onChange = vi.fn()
+    render(
+      <DateRangeInput
+        onChange={onChange}
+        value={{
+          from: jan10,
+          to: jan20,
+        }}
+      />,
+    )
+
+    screen.getByRole('button', { name: 'Clear' }).focus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(onChange).toHaveBeenCalledWith(null)
+    expect(
+      screen.queryByRole('button', { name: 'Apply' }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('DateRangeInput sections', () => {
+  it('refuses a left section: that side is the button that opens the calendar', () => {
+    render(
+      // @ts-expect-error no leftSection in the contract
+      <DateRangeInput leftSection={<span>left</span>} />,
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Open calendar' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('left')).not.toBeInTheDocument()
+  })
+
+  it('refuses a right section: that side is the clear button', () => {
+    render(
+      // @ts-expect-error no rightSection in the contract
+      <DateRangeInput rightSection={<span>right</span>} />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
+    expect(screen.queryByText('right')).not.toBeInTheDocument()
+  })
+
+  it('refuses both sections at once, keeping its own buttons', () => {
+    render(
+      <DateRangeInput
+        // @ts-expect-error the left side is the button that opens the calendar
+        leftSection={<span>left</span>}
+        rightSection={<span>right</span>}
+      />,
+    )
+
+    // Even forced past the type, the field keeps its own two buttons.
+    expect(
+      screen.getByRole('button', { name: 'Open calendar' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
+    expect(screen.queryByText('left')).not.toBeInTheDocument()
+    expect(screen.queryByText('right')).not.toBeInTheDocument()
+  })
+
+  it('still lets the two button slots be sized', () => {
+    render(<DateRangeInput leftSectionWidth={56} rightSectionWidth={64} />)
+
+    expect(screen.getByRole('textbox')).toHaveStyle({
+      paddingLeft: '56px',
+      paddingRight: '64px',
+    })
+  })
+})
+
+describe('DateRangeInput axes', () => {
+  it('publishes the size it was given on the field it paints', () => {
+    const { container } = render(<DateRangeInput size="sm" />)
+
+    expect(container.querySelector('.input-root')).toHaveAttribute(
+      'data-size',
+      'sm',
+    )
+  })
+
+  it('publishes the default size when none is given', () => {
+    const { container } = render(<DateRangeInput />)
+
+    expect(container.querySelector('.input-root')).toHaveAttribute(
+      'data-size',
+      'md',
+    )
   })
 })

@@ -12,6 +12,11 @@
  * - Shortcut: right-aligned keyboard shortcut text
  * - Label: non-interactive section header (inset variant for alignment)
  * - Separator: horizontal divider between groups
+ * - disabledReason on Item, CheckboxItem and RadioItem blocks it like
+ *   `disabled` and says why: arrow keys still reach it, a tooltip on its right
+ *   shows the reason on hover and on keyboard focus, and the item is described
+ *   by it (ARC-ERR-9). Click, Enter and Space neither fire onClick nor toggle,
+ *   select or close the menu
  *
  * Implementation:
  * - Use Radix UI DropdownMenu primitives (full keyboard nav, ARIA, focus management)
@@ -22,6 +27,7 @@
  *     <DropdownMenu.Content side="bottom" align="end">
  *       <DropdownMenu.Label>Options</DropdownMenu.Label>
  *       <DropdownMenu.Item onClick={handleEdit}>Edit<DropdownMenu.Shortcut>⌘E</DropdownMenu.Shortcut></DropdownMenu.Item>
+ *       <DropdownMenu.Item disabledReason="Only owners can share">Share</DropdownMenu.Item>
  *       <DropdownMenu.Separator />
  *       <DropdownMenu.Item variant="destructive" onClick={handleDelete}>Delete</DropdownMenu.Item>
  *     </DropdownMenu.Content>
@@ -53,6 +59,7 @@ export type DropdownMenuItemVariant = 'default' | 'destructive'
 export type DropdownMenuItemProps = {
   variant?: DropdownMenuItemVariant // visual variant
   disabled?: boolean // prevents interaction
+  disabledReason?: string // blocks it, arrows still reach it, tooltip says why
   asChild?: boolean // render as child element
   onClick?: React.MouseEventHandler<HTMLDivElement> // click handler
 }
@@ -60,6 +67,7 @@ export type DropdownMenuItemProps = {
 export type DropdownMenuCheckboxItemProps = {
   checked?: boolean // checkbox state
   disabled?: boolean // prevents interaction
+  disabledReason?: string // blocks it, arrows still reach it, tooltip says why
   onCheckedChange?: (checked: boolean) => void // fires on toggle
 }
 
@@ -71,6 +79,7 @@ export type DropdownMenuRadioGroupProps = {
 export type DropdownMenuRadioItemProps = {
   value: string // radio value (required)
   disabled?: boolean // prevents interaction
+  disabledReason?: string // blocks it, arrows still reach it, tooltip says why
 }
 
 export type DropdownMenuLabelProps = {

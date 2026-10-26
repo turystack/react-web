@@ -80,6 +80,9 @@ export function DurationText(props: DurationTextProps) {
     return (
       <FormatterText
         {...props}
+        published={{
+          'data-variant': props.variant ?? 'short',
+        }}
         testId="duration-text"
         text={props.fallback ?? DEFAULT_FALLBACK}
       />
@@ -98,5 +101,14 @@ export function DurationText(props: DurationTextProps) {
           labels.durationText,
         )
 
-  return <FormatterText {...props} testId="duration-text" text={text} />
+  return (
+    <FormatterText
+      {...props}
+      published={{
+        'data-variant': props.variant ?? 'short',
+      }}
+      testId="duration-text"
+      text={text}
+    />
+  )
 }

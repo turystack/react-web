@@ -169,6 +169,9 @@ function DateTextSingle(props: DateTextSingleProps) {
     <FormatterText
       {...props}
       dateTime={date?.toISOString()}
+      published={{
+        'data-variant': resolution.variant,
+      }}
       tag="time"
       testId="date-text"
       text={date ? formatDate(date, resolution) : fallback}
@@ -191,7 +194,16 @@ function DateTextRange(props: DateTextRangeProps) {
       ? labels.common.upTo(to)
       : fallback
 
-  return <FormatterText {...props} testId="date-text" text={text} />
+  return (
+    <FormatterText
+      {...props}
+      published={{
+        'data-variant': resolution.variant,
+      }}
+      testId="date-text"
+      text={text}
+    />
+  )
 }
 
 export function DateText(props: DateTextProps) {

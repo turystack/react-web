@@ -73,6 +73,19 @@ describe('Tree', () => {
     expect(onExpandedChange).toHaveBeenCalledWith(['south-america'])
   })
 
+  it('nests an open branch in a native group', () => {
+    render(<Folders defaultExpanded={['south-america']} />)
+
+    const group = screen.getByRole('group')
+    expect(group.tagName).toBe('FIELDSET')
+    expect(group).not.toHaveAttribute('role')
+    expect(
+      Array.from(group.querySelectorAll('[role="treeitem"]')).map(
+        (row) => row.textContent,
+      ),
+    ).toEqual(['Brazil', 'Chile'])
+  })
+
   it('starts open where it was told to', () => {
     render(<Folders defaultExpanded={['south-america']} />)
 

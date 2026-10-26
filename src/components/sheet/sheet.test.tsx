@@ -1,10 +1,11 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
 import { TuryProvider } from '@/components/tury-provider'
 
 import { Sheet } from './sheet'
+import { ComposedSheet } from './sheet.composed'
 
 describe('Sheet', () => {
   it('renders no dialog while closed', () => {
@@ -332,5 +333,98 @@ describe('Sheet floating, non-modal', () => {
     await userEvent.keyboard('{Escape}')
 
     expect(onChange).toHaveBeenCalledWith(false)
+  })
+})
+
+describe('Sheet scrim', () => {
+  it('dims the page with the shared overlay token, blurred', () => {
+    render(
+      <Sheet open>
+        <Sheet.Body>panel</Sheet.Body>
+      </Sheet>,
+    )
+
+    const backdrop = screen.getByTestId('sheet-backdrop')
+    expect(backdrop).toHaveClass('bg-overlay', 'backdrop-blur-overlay')
+    expect(backdrop.className).not.toMatch(/bg-black/)
+  })
+})
+
+describe('ComposedSheet finalFocus', () => {
+  function Harness({ redirect }: { redirect: boolean }) {
+    const [open, setOpen] = useState(false)
+    const target = useRef<HTMLButtonElement>(null)
+
+    return (
+      <>
+        <button onClick={() => setOpen(true)} type="button">
+          Open
+        </button>
+        <button ref={target} type="button">
+          Target
+        </button>
+        <ComposedSheet
+          finalFocus={redirect ? target : undefined}
+          onChange={setOpen}
+          open={open}
+        >
+          <ComposedSheet.Body>panel</ComposedSheet.Body>
+        </ComposedSheet>
+      </>
+    )
+  }
+
+  it('sends focus where the composer says once the sheet closes', async () => {
+    const user = userEvent.setup()
+    render(<Harness redirect />)
+
+    await user.click(screen.getByRole('button', { name: 'Open' }))
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Target' })).toHaveFocus(),
+    )
+  })
+
+  it('returns focus to the control that opened it by default', async () => {
+    const user = userEvent.setup()
+    render(<Harness redirect={false} />)
+
+    await user.click(screen.getByRole('button', { name: 'Open' }))
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Open' })).toHaveFocus(),
+    )
+  })
+})
+
+describe('Sheet axes', () => {
+  it('publishes its default variant, and no size when none was chosen', () => {
+    render(
+      <Sheet open>
+        <Sheet.Body>panel</Sheet.Body>
+      </Sheet>,
+    )
+
+    const popup = screen.getByTestId('sheet-popup')
+    expect(popup).toHaveAttribute('data-variant', 'default')
+    expect(popup).not.toHaveAttribute('data-size')
+  })
+
+  it('publishes the size and variant it was given', () => {
+    render(
+      <Sheet open side="left" size="xl" variant="floating">
+        <Sheet.Body>panel</Sheet.Body>
+      </Sheet>,
+    )
+
+    const popup = screen.getByTestId('sheet-popup')
+    expect(popup).toHaveAttribute('data-size', 'xl')
+    expect(popup).toHaveAttribute('data-variant', 'floating')
   })
 })

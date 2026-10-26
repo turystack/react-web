@@ -4,7 +4,31 @@ import { tv } from 'tailwind-variants'
 import type { FlexProps } from './flex.types'
 
 const styles = tv({
-  base: 'flex flex-root',
+  base: 'flex-root flex',
+  // An inline Flex that hideBelow shows again comes back inline-flex, not
+  // flex: the breakpoint restores the display the component already had.
+  compoundVariants: [
+    {
+      class: 'sm:inline-flex',
+      hideBelow: 'sm',
+      inline: true,
+    },
+    {
+      class: 'md:inline-flex',
+      hideBelow: 'md',
+      inline: true,
+    },
+    {
+      class: 'lg:inline-flex',
+      hideBelow: 'lg',
+      inline: true,
+    },
+    {
+      class: 'xl:inline-flex',
+      hideBelow: 'xl',
+      inline: true,
+    },
+  ],
   defaultVariants: {
     align: 'stretch',
     direction: 'row',
@@ -38,6 +62,21 @@ const styles = tv({
     inline: {
       true: 'inline-flex',
     },
+    // Responsive show/hide, every class a literal so Tailwind generates it.
+    // Declared after `inline`, so `hidden` is the display tailwind-merge
+    // keeps below the breakpoint; from it on the row is a flex row again.
+    hideAbove: {
+      lg: 'lg:hidden',
+      md: 'md:hidden',
+      sm: 'sm:hidden',
+      xl: 'xl:hidden',
+    },
+    hideBelow: {
+      lg: 'hidden lg:flex',
+      md: 'hidden md:flex',
+      sm: 'hidden sm:flex',
+      xl: 'hidden xl:flex',
+    },
     justify: {
       around: 'justify-around',
       between: 'justify-between',
@@ -66,6 +105,9 @@ function Flex({
   children,
   direction,
   gap,
+  hideAbove,
+  hideBelow,
+  id,
   inline,
   justify,
   minHeight,
@@ -78,12 +120,15 @@ function Flex({
         block,
         direction,
         gap,
+        hideAbove,
+        hideBelow,
         inline,
         justify,
         minHeight,
         wrap,
       })}
       data-testid="flex-root"
+      id={id}
     >
       {children}
     </div>

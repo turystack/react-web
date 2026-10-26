@@ -10,6 +10,9 @@
  * - Rows-per-page: dropdown selector; options default to [10, 20, 50, 100]
  * - Offset mode returns to the first page when the page size changes
  * - Buttons disabled when at first/last page
+ * - Every name comes from the `pagination` labels (@turystack/react-i18n): the
+ *   landmark (`label`), the previous/next buttons and the rows-per-page Select,
+ *   which is named by `rowsPerPage` like the caption beside it
  *
  * Implementation:
  * - Offset: calculate displayed range, total pages from total/rowsPerPage
@@ -18,7 +21,7 @@
  *     onPageChange={setPage} onRowsPerPageChange={setRpp} />
  * - <Pagination mode="cursor" rowsPerPage={20} hasNextPage onNextPage={loadMore} />
  *
- * Dependencies: @turystack/react-icons (ChevronLeft, ChevronRight)
+ * Dependencies: Button, Select, LabelsProvider, internal icons (ChevronLeft, ChevronRight)
  */
 
 type OffsetPaginationProps = {

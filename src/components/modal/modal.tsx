@@ -4,6 +4,7 @@ import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
 import { usePortalContainer } from '@/components/portal-provider'
 import { X } from '@/internal/icons'
+import { axes } from '@/support/utils'
 
 import type {
   ModalBodyProps,
@@ -27,7 +28,7 @@ const styles = tv({
   },
   slots: {
     backdrop: [
-      'modal-backdrop fixed inset-0 isolate z-50 bg-black/50',
+      'modal-backdrop fixed inset-0 isolate z-50 bg-overlay backdrop-blur-overlay',
       'data-open:fade-in-0 duration-100 data-open:animate-in',
       'data-closed:fade-out-0 data-closed:animate-out',
     ],
@@ -108,6 +109,9 @@ function ModalRoot({
         />
         <Dialog.Popup
           className={popup()}
+          {...axes(styles, {
+            size,
+          })}
           data-testid="modal-popup"
           onClick={handleOverlayClick}
         >

@@ -116,3 +116,38 @@ describe('PhoneText', () => {
     expect(custom).toHaveTextContent('no phone')
   })
 })
+
+describe('PhoneText axes', () => {
+  it('publishes its default variant for a theme to select', () => {
+    render(<PhoneText value={BR} />)
+
+    expect(
+      screen.getByTestId('phone-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'national')
+  })
+
+  it('publishes the variant it was given', () => {
+    render(<PhoneText value={BR} variant="e164" />)
+
+    expect(
+      screen.getByTestId('phone-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'e164')
+  })
+
+  it('publishes it on the fallback too', () => {
+    render(<PhoneText value={null} variant="international" />)
+
+    expect(
+      screen.getByTestId('phone-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'international')
+  })
+
+  it('moves it to the wrapper when a WhatsApp link sits beside the number', () => {
+    const { container } = render(<PhoneText value={BR} whatsapp />)
+
+    expect(container.querySelector('.formatter-text')).toHaveAttribute(
+      'data-variant',
+      'national',
+    )
+  })
+})

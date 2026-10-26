@@ -176,7 +176,7 @@ describe('TagsInput', () => {
   })
 
   it('carries the native input attributes it is given', () => {
-    render(<TagsInput aria-label="Topics" name="topics" />)
+    render(<TagsInput ariaLabel="Topics" name="topics" />)
 
     expect(screen.getByRole('textbox', { name: 'Topics' })).toHaveAttribute(
       'name',
@@ -302,3 +302,80 @@ describe.each(['default', 'ghost'] as InputVariant[])(
     })
   },
 )
+
+describe('TagsInput contract', () => {
+  it('still reports key presses it handles itself', async () => {
+    const onKeyDown = vi.fn()
+    const onChange = vi.fn()
+    render(
+      <TagsInput
+        ariaLabel="Topics"
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+      />,
+    )
+
+    await userEvent.type(
+      screen.getByRole('textbox', { name: 'Topics' }),
+      'react{Enter}',
+    )
+
+    expect(onChange).toHaveBeenLastCalledWith(['react'])
+    expect(onKeyDown).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: 'Enter',
+      }),
+    )
+  })
+
+  it('never lets a class from outside restyle the field', () => {
+    render(
+      <TagsInput
+        ariaLabel="Topics"
+        // @ts-expect-error — className is not part of the contract
+        className="outside-class"
+      />,
+    )
+
+    expect(screen.getByRole('textbox', { name: 'Topics' })).not.toHaveClass(
+      'outside-class',
+    )
+  })
+})
+
+describe('TagsInput data-testid', () => {
+  it('uses the testing handle the consumer gave the field', () => {
+    render(<TagsInput ariaLabel="Tags" data-testid="order-tags" />)
+
+    expect(screen.getByTestId('order-tags')).toBe(
+      screen.getByRole('textbox', { name: 'Tags' }),
+    )
+    expect(screen.queryByTestId('tags-input-field')).not.toBeInTheDocument()
+  })
+
+  it('keeps its own handle when none is given', () => {
+    render(<TagsInput ariaLabel="Tags" />)
+
+    expect(screen.getByTestId('tags-input-field')).toBe(
+      screen.getByRole('textbox', { name: 'Tags' }),
+    )
+  })
+})
+
+describe('TagsInput axes', () => {
+  it('publishes the resolved defaults on its root', () => {
+    render(<TagsInput />)
+    const root = screen.getByTestId('tags-input-root')
+
+    expect(root).toHaveAttribute('data-size', 'md')
+    expect(root).toHaveAttribute('data-variant', 'default')
+  })
+
+  it('publishes an explicit size and variant on its root', () => {
+    render(<TagsInput size="lg" variant="ghost" />)
+    const root = screen.getByTestId('tags-input-root')
+
+    expect(root).toHaveAttribute('data-size', 'lg')
+    expect(root).toHaveAttribute('data-variant', 'ghost')
+  })
+})

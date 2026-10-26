@@ -248,3 +248,63 @@ describe('DateText range', () => {
     expect(screen.getByTestId('date-text')).toHaveTextContent('—')
   })
 })
+
+describe('DateText inline in a sentence', () => {
+  it('takes the size and colour of the text around it', () => {
+    render(
+      <Brazil>
+        <DateText inheritColor size="inherit" value={INSTANT} />
+      </Brazil>,
+    )
+
+    const rendered = screen.getByTestId('date-text')
+    expect(rendered).toHaveTextContent('24/08/2026')
+    expect(rendered).toHaveClass('text-[length:inherit]')
+    expect(rendered).not.toHaveClass('text-base', 'text-foreground')
+  })
+
+  it('keeps its own base size and colour unless asked', () => {
+    render(
+      <Brazil>
+        <DateText value={INSTANT} />
+      </Brazil>,
+    )
+
+    expect(screen.getByTestId('date-text')).toHaveClass(
+      'text-base',
+      'text-foreground',
+    )
+  })
+})
+
+describe('DateText axes', () => {
+  it('publishes its default variant for a theme to select', () => {
+    render(<DateText value={INSTANT} />)
+
+    expect(
+      screen.getByTestId('date-text').closest('.formatter-text'),
+    ).toHaveAttribute('data-variant', 'date')
+  })
+
+  it('publishes the variant it was given, on a range too', () => {
+    render(
+      <>
+        <DateText value={INSTANT} variant="time" />
+        <DateText
+          mode="range"
+          value={{
+            from: INSTANT,
+            to: INSTANT,
+          }}
+          variant="iso"
+        />
+      </>,
+    )
+
+    const [single, range] = screen
+      .getAllByTestId('date-text')
+      .map((value) => value.closest('.formatter-text'))
+    expect(single).toHaveAttribute('data-variant', 'time')
+    expect(range).toHaveAttribute('data-variant', 'iso')
+  })
+})

@@ -1,4 +1,10 @@
-import { type CSSProperties, Fragment, type MouseEvent, useState } from 'react'
+import {
+  type CSSProperties,
+  Fragment,
+  type KeyboardEvent,
+  type MouseEvent,
+  useState,
+} from 'react'
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
 import { Checkbox } from '@/components/checkbox'
@@ -7,60 +13,140 @@ import { useLabels } from '@/components/labels-provider'
 import { LoadingOverlay } from '@/components/loading-overlay'
 import { Pagination } from '@/components/pagination'
 import { Skeleton } from '@/components/skeleton'
-import { ArrowDown, ArrowUp, ArrowUpDown } from '@/internal/icons'
+import {
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Inbox,
+  Lock,
+} from '@/internal/icons'
+import { isRowActivation } from '@/internal/row-activation'
+import { axes } from '@/support/utils'
 
 import type { TableProps } from './table.types'
-import { getTableBody, getTableLayout } from './table.utils'
+import {
+  getColumnContentStyle,
+  getTableBody,
+  getTableLayout,
+} from './table.utils'
 
 const DEFAULT_LOADING_ROWS = 3
 
+/**
+ * A pinned cell is painted on top of the cells scrolling under it, so it needs
+ * an opaque background — and then the row's translucent hover, selected and
+ * active tints no longer show through. The tint is repainted on `::after`,
+ * which sits in the cell's own stacking context above that background and
+ * below its content; `::before` is the hairline separating it from the
+ * scrolling columns, on the edge that faces them.
+ */
+const PINNED =
+  'sticky z-10 bg-background before:pointer-events-none before:absolute before:inset-y-0 before:w-px before:bg-border after:pointer-events-none after:absolute after:inset-0 after:-z-10'
+
+const PINNED_CELL_TINTS =
+  'group-hover/row:after:bg-muted/50 group-focus-visible/row:after:bg-muted/50 group-aria-[current=true]/row:after:bg-accent group-data-[state=selected]/row:after:bg-muted'
+
+const PINNED_HEAD_TINT = 'after:bg-muted/40'
+
 const styles = tv({
+  defaultVariants: {
+    align: 'left',
+    clickable: false,
+    density: 'default',
+  },
   slots: {
     body: 'table-body [&_tr:last-child]:border-0',
-    cell: 'table-cell whitespace-nowrap p-2 align-middle [&:has([role=checkbox])]:pr-0',
+    /**
+     * `overflow-x: clip` on every cell, body and header: nothing a cell holds
+     * — a badge, an avatar, a long word — paints over the next column. It
+     * clips at the padding box, so a focus ring inside the padding still
+     * shows, and only sideways, so a ring above or below is never cut.
+     */
+    cell: 'table-cell overflow-x-clip whitespace-nowrap align-middle [&:has([role=checkbox])]:pr-0',
     cellContent: 'table-cell-content min-w-0 max-w-full [&>*]:min-w-0',
+    /**
+     * A cell whose value is plain text or a number, cut the way the header's
+     * label is: a cell does not wrap, so a long value painted over the next
+     * column. What a selector draws itself — a badge, a menu, lines of
+     * reasons — is left as it is drawn.
+     */
+    cellText: 'table-cell-text block min-w-0 truncate',
     container:
       'table-container relative w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-md border',
     emptyCell: 'table-empty-cell p-8 text-center text-muted-foreground',
-    head: 'table-head h-10 whitespace-nowrap px-2 text-left align-middle font-medium text-foreground [&:has([role=checkbox])]:pr-0',
+    head: 'table-head overflow-x-clip whitespace-nowrap px-2 align-middle font-medium text-foreground [&:has([role=checkbox])]:pr-0',
+    /**
+     * The header's text, cut with an ellipsis rather than painted over the
+     * next column: a fixed-layout cell keeps its width whatever it holds, so
+     * a label wider than its column used to run into the neighbour's ("Row"
+     * and "Id" read as "RowId"). The whole label stays in `title`, the way
+     * a truncated value does in a cell.
+     */
+    headLabel: 'table-head-label block min-w-0 truncate',
     header: 'table-header bg-muted/40 [&_tr]:border-b',
+    headerRow: 'table-header-row',
     root: 'table-root flex w-full min-w-0 flex-col gap-4',
-    row: 'table-row border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted',
+    row: 'table-row group/row border-b transition-colors hover:bg-muted/50 aria-[current=true]:bg-accent data-[state=selected]:bg-muted',
     sortButton:
-      'table-sort-button inline-flex cursor-pointer select-none items-center gap-1',
+      'table-sort-button inline-flex min-w-0 max-w-full cursor-pointer select-none items-center gap-1',
     table: 'table-table w-full table-fixed caption-bottom text-sm',
+  },
+  variants: {
+    align: {
+      // text-align moves text and inline content only; preflight makes svg
+      // and img blocks, so an icon alone in a cell needs its own margins.
+      center: {
+        cell: 'text-center',
+        cellContent: 'mx-auto [&>img]:mx-auto [&>svg]:mx-auto',
+        head: 'text-center',
+        sortButton: 'mx-auto',
+      },
+      left: {
+        cell: 'text-left',
+        head: 'text-left',
+      },
+      right: {
+        cell: 'text-right',
+        cellContent: 'ml-auto [&>img]:ml-auto [&>svg]:ml-auto',
+        head: 'text-right',
+        sortButton: 'ml-auto',
+      },
+    },
+    clickable: {
+      false: {},
+      true: {
+        row: 'cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2',
+      },
+    },
+    density: {
+      compact: {
+        cell: 'px-2 py-1',
+        head: 'h-8',
+      },
+      default: {
+        cell: 'p-2',
+        head: 'h-10',
+      },
+    },
+    sticky: {
+      left: {
+        cell: `${PINNED} left-0 before:right-0 ${PINNED_CELL_TINTS}`,
+        head: `${PINNED} left-0 before:right-0 ${PINNED_HEAD_TINT}`,
+      },
+      right: {
+        cell: `${PINNED} right-0 before:left-0 ${PINNED_CELL_TINTS}`,
+        head: `${PINNED} right-0 before:left-0 ${PINNED_HEAD_TINT}`,
+      },
+    },
   },
 })
 
-const {
-  body,
-  cell,
-  cellContent,
-  container,
-  emptyCell,
-  head,
-  header,
-  root,
-  row,
-  sortButton,
-  table,
-} = styles()
-
-const interactiveSelector = [
-  'a',
-  'button',
-  'input',
-  'select',
-  'textarea',
-  '[role="button"]',
-  '[role="checkbox"]',
-  '[role="menuitem"]',
-  '[data-table-row-click-ignore]',
-].join(',')
-
 function Table<T>({
+  activeKey,
   columns,
   defaultSelectedKeys = [],
+  density = 'default',
   deniedSection,
   emptySection,
   errorSection,
@@ -75,11 +161,30 @@ function Table<T>({
   onSelectionChange,
   onSortChange,
   pagination,
+  rowName,
   selectedKeys: controlledSelectedKeys,
   selection = 'none',
   sort,
 }: TableProps<T>) {
   const labels = useLabels()
+  const {
+    body,
+    cell,
+    cellContent,
+    cellText,
+    container,
+    emptyCell,
+    head,
+    headLabel,
+    header,
+    headerRow,
+    root,
+    row,
+    sortButton,
+    table,
+  } = styles({
+    density,
+  })
   const [internalSelectedKeys, setInternalSelectedKeys] =
     useState<string[]>(defaultSelectedKeys)
 
@@ -134,64 +239,81 @@ function Table<T>({
   }
 
   const handleRowClick = (event: MouseEvent<HTMLTableRowElement>, item: T) => {
-    if (!onRowClick) {
+    if (onRowClick && isRowActivation(event.currentTarget, event.target)) {
+      onRowClick(item)
+    }
+  }
+
+  // Only a key pressed on the row itself: Enter on a focused menu trigger or
+  // Space on a checkbox inside a cell belongs to that control.
+  const handleRowKeyDown = (
+    event: KeyboardEvent<HTMLTableRowElement>,
+    item: T,
+  ) => {
+    if (!onRowClick || event.target !== event.currentTarget) {
       return
     }
 
-    const target = event.target
-
-    if (target instanceof Element && target.closest(interactiveSelector)) {
-      return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onRowClick(item)
     }
-
-    onRowClick(item)
   }
 
   const getSortIcon = (columnKey: string) => {
     if (sort === columnKey) {
-      return <ArrowUp className="table-sort-icon size-3.5" />
+      return <ArrowUp className="table-sort-icon size-3.5 shrink-0" />
     }
     if (sort === `-${columnKey}`) {
-      return <ArrowDown className="table-sort-icon size-3.5" />
+      return <ArrowDown className="table-sort-icon size-3.5 shrink-0" />
     }
-    return <ArrowUpDown className="table-sort-icon size-3.5" />
+    return <ArrowUpDown className="table-sort-icon size-3.5 shrink-0" />
   }
 
-  const getAlignClass = (align?: 'left' | 'center' | 'right') => {
-    if (align === 'center') {
-      return 'text-center'
-    }
-    if (align === 'right') {
-      return 'text-right'
-    }
-    return 'text-left'
-  }
+  const getColumnStyle = (
+    percentage: number,
+    pixels?: number,
+  ): CSSProperties => ({
+    width: pixels === undefined ? `${percentage}%` : `${pixels}px`,
+  })
 
-  const getContentAlignClass = (align?: 'left' | 'center' | 'right') => {
-    if (align === 'center') {
-      return 'mx-auto'
+  // Counted on the rows on screen: a key selected on another page neither
+  // fills nor half-fills this page's select-all box.
+  const selectedOnPage = rows.filter((item) =>
+    selectedKeys.includes(String(item[itemKey])),
+  ).length
+  const allSelected = rows.length > 0 && selectedOnPage === rows.length
+  const someSelected = selectedOnPage > 0 && !allSelected
+
+  /**
+   * What a row's checkbox is called after: the name the consumer gave it, or
+   * else the first visible column's own text — the raw value, not what its
+   * selector draws, which may be anything. A row with neither is "Select row".
+   */
+  const getRowName = (item: T) => {
+    if (rowName) {
+      return rowName(item) || undefined
     }
-    if (align === 'right') {
-      return 'ml-auto'
+    const first = visibleColumns[0]
+    const raw = first ? item[first.key as keyof T] : undefined
+    if (typeof raw === 'string' && raw.trim() !== '') {
+      return raw
+    }
+    if (typeof raw === 'number') {
+      return String(raw)
     }
     return undefined
   }
 
-  const getColumnStyle = (percentage: number): CSSProperties => ({
-    width: `${percentage}%`,
-  })
-
-  const getColumnContentStyle = (width?: number): CSSProperties | undefined =>
-    width
-      ? {
-          maxWidth: `min(100%, ${width}px)`,
-          width: '100%',
-        }
-      : undefined
-
-  const allSelected = Boolean(
-    rows.length > 0 && selectedKeys.length === rows.length,
-  )
+  // Only text is cut here: a node the selector built decides its own layout.
+  const renderCellValue = (value: React.ReactNode) =>
+    typeof value === 'string' || typeof value === 'number' ? (
+      <span className={cellText()} title={String(value) || undefined}>
+        {value}
+      </span>
+    ) : (
+      value
+    )
 
   const renderStateRow = (content: React.ReactNode, testId: string) => (
     <tr>
@@ -222,7 +344,11 @@ function Table<T>({
               {hasSpacer && columnIndex === spacerIndex && (
                 <td aria-hidden className={cell()} />
               )}
-              <td className={cell()}>
+              <td
+                className={cell({
+                  sticky: col.sticky,
+                })}
+              >
                 <Skeleton />
               </td>
             </Fragment>
@@ -240,6 +366,7 @@ function Table<T>({
       return renderStateRow(
         deniedSection ?? (
           <EmptyState
+            icon={<Lock />}
             size="sm"
             title={tableBody.reason ?? labels.table.error}
           />
@@ -257,6 +384,8 @@ function Table<T>({
                 {labels.common.retry}
               </Button>
             }
+            description={labels.table.errorDescription}
+            icon={<AlertCircle />}
             size="sm"
             title={labels.table.error}
           />
@@ -266,21 +395,38 @@ function Table<T>({
     }
 
     if (tableBody.kind === 'empty') {
-      return renderStateRow(emptySection ?? labels.table.empty, 'table-empty')
+      // The same card as the other states, not a bare sentence: an icon, what
+      // is missing and what would fill it — so an empty table reads as a
+      // finished answer rather than as something still on its way.
+      return renderStateRow(
+        emptySection ?? (
+          <EmptyState
+            description={labels.table.emptyDescription}
+            icon={<Inbox />}
+            size="sm"
+            title={labels.table.empty}
+          />
+        ),
+        'table-empty',
+      )
     }
 
     return rows.map((item, index) => {
       const key = String(item[itemKey])
       const isSelected = selectedKeys.includes(key)
+      const isActive = activeKey !== undefined && String(activeKey) === key
 
       return (
         <tr
+          aria-current={isActive ? 'true' : undefined}
           className={row({
-            className: onRowClick ? 'cursor-pointer' : undefined,
+            clickable: Boolean(onRowClick),
           })}
           data-state={isSelected ? 'selected' : undefined}
           key={key}
           onClick={(event) => handleRowClick(event, item)}
+          onKeyDown={(event) => handleRowKeyDown(event, item)}
+          tabIndex={onRowClick ? 0 : undefined}
         >
           {hasSelection && (
             <td
@@ -289,45 +435,50 @@ function Table<T>({
               })}
             >
               <Checkbox
+                ariaLabel={labels.table.selectRow(getRowName(item))}
                 checked={isSelected}
                 onChange={(checked) => handleSelectRow(key, checked)}
               />
             </td>
           )}
-          {visibleColumns.map((col, columnIndex) => {
-            const align = col.align
-
-            return (
-              <Fragment key={col.key}>
-                {hasSpacer && columnIndex === spacerIndex && (
-                  <td aria-hidden className={cell()} />
-                )}
-                <td
-                  className={cell({
-                    className: getAlignClass(align),
+          {visibleColumns.map((col, columnIndex) => (
+            <Fragment key={col.key}>
+              {hasSpacer && columnIndex === spacerIndex && (
+                <td aria-hidden className={cell()} />
+              )}
+              <td
+                className={cell({
+                  align: col.align,
+                  sticky: col.sticky,
+                })}
+              >
+                <div
+                  className={cellContent({
+                    align: col.align,
                   })}
+                  style={getColumnContentStyle(col)}
                 >
-                  <div
-                    className={cellContent({
-                      className: getContentAlignClass(align),
-                    })}
-                    style={getColumnContentStyle(col.width)}
-                  >
-                    {col.selector
+                  {renderCellValue(
+                    col.selector
                       ? col.selector(item, index)
-                      : (item[col.key as keyof T] as React.ReactNode)}
-                  </div>
-                </td>
-              </Fragment>
-            )
-          })}
+                      : (item[col.key as keyof T] as React.ReactNode),
+                  )}
+                </div>
+              </td>
+            </Fragment>
+          ))}
         </tr>
       )
     })
   }
 
   return (
-    <div className={root()}>
+    <div
+      className={root()}
+      {...axes(styles, {
+        density,
+      })}
+    >
       <div className={container()}>
         <table
           aria-busy={isBusy ? true : undefined}
@@ -342,26 +493,36 @@ function Table<T>({
         >
           <colgroup>
             {hasSelection && (
-              <col style={getColumnStyle(layout.selectionPercentage)} />
+              <col style={getColumnStyle(0, layout.selectionPixels)} />
             )}
             {visibleColumns.map((col, index) => (
               <Fragment key={col.key}>
                 {hasSpacer && index === spacerIndex && (
                   <col style={getColumnStyle(layout.spacerPercentage)} />
                 )}
-                <col style={getColumnStyle(layout.columns[index].percentage)} />
+                <col
+                  style={getColumnStyle(
+                    layout.columns[index].percentage,
+                    layout.columns[index].pixels,
+                  )}
+                />
               </Fragment>
             ))}
           </colgroup>
           <thead className={header()}>
-            <tr className={row()}>
+            <tr className={headerRow()}>
               {hasSelection && (
                 <th
                   className={head({
                     className: 'w-10',
                   })}
                 >
-                  <Checkbox checked={allSelected} onChange={handleSelectAll} />
+                  <Checkbox
+                    ariaLabel={labels.table.selectAll}
+                    checked={allSelected}
+                    indeterminate={someSelected}
+                    onChange={handleSelectAll}
+                  />
                 </th>
               )}
               {visibleColumns.map((col, index) => {
@@ -374,29 +535,34 @@ function Table<T>({
                     )}
                     <th
                       className={head({
-                        className: getAlignClass(align),
+                        align,
+                        sticky: col.sticky,
                       })}
                     >
                       {col.sorter ? (
                         <button
                           className={sortButton({
-                            className: getContentAlignClass(align),
+                            align,
                           })}
                           onClick={() => handleSort(col.key)}
-                          style={getColumnContentStyle(col.width)}
+                          style={getColumnContentStyle(col)}
                           type="button"
                         >
-                          {col.label}
+                          <span className={headLabel()} title={col.label}>
+                            {col.label}
+                          </span>
                           {getSortIcon(col.key)}
                         </button>
                       ) : (
                         <div
                           className={cellContent({
-                            className: getContentAlignClass(align),
+                            align,
                           })}
-                          style={getColumnContentStyle(col.width)}
+                          style={getColumnContentStyle(col)}
                         >
-                          {col.label}
+                          <span className={headLabel()} title={col.label}>
+                            {col.label}
+                          </span>
                         </div>
                       )}
                     </th>

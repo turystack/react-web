@@ -93,6 +93,21 @@ describe('List', () => {
   })
 })
 
+describe('List ariaLabel', () => {
+  it('names the list for assistive technology', () => {
+    render(
+      <List
+        ariaLabel="Orders"
+        itemKey="id"
+        items={orders}
+        renderItem={renderOrder}
+      />,
+    )
+
+    expect(screen.getByRole('list', { name: 'Orders' })).toBeInTheDocument()
+  })
+})
+
 describe('List loading', () => {
   it('shows placeholder rows instead of items while loading with no data', () => {
     render(<List itemKey="id" items={[]} loading renderItem={renderOrder} />)
@@ -230,7 +245,7 @@ describe('List pagination mode', () => {
 
     expect(
       screen.getByRole('navigation', {
-        name: 'pagination',
+        name: 'Pagination',
       }),
     ).toBeInTheDocument()
     expect(screen.queryByTestId('list-infinite')).not.toBeInTheDocument()
@@ -735,5 +750,231 @@ describe('List outcome', () => {
     expect(screen.getByText('Order one')).toBeTruthy()
     expect(screen.getByTestId('list-load-more-error')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+})
+
+describe('List activeKey', () => {
+  it('marks only the item open in the preview as current', () => {
+    render(
+      <List
+        activeKey="o2"
+        itemKey="id"
+        items={orders}
+        renderItem={renderOrder}
+      />,
+    )
+
+    const [first, second] = screen.getAllByRole('listitem')
+
+    expect(second).toHaveAttribute('aria-current', 'true')
+    expect(second).toHaveClass('aria-[current=true]:bg-accent')
+    expect(first).not.toHaveAttribute('aria-current')
+  })
+
+  it('marks nothing without an activeKey', () => {
+    render(<List itemKey="id" items={orders} renderItem={renderOrder} />)
+
+    for (const item of screen.getAllByRole('listitem')) {
+      expect(item).not.toHaveAttribute('aria-current')
+    }
+  })
+
+  it('marks nothing when the activeKey matches no item', () => {
+    render(
+      <List
+        activeKey="missing"
+        itemKey="id"
+        items={orders}
+        renderItem={renderOrder}
+      />,
+    )
+
+    for (const item of screen.getAllByRole('listitem')) {
+      expect(item).not.toHaveAttribute('aria-current')
+    }
+  })
+
+  it('matches a numeric activeKey against the key a function itemKey returns', () => {
+    render(
+      <List
+        activeKey={1}
+        itemKey={(_, index) => index}
+        items={orders}
+        renderItem={renderOrder}
+      />,
+    )
+
+    const [first, second] = screen.getAllByRole('listitem')
+
+    expect(second).toHaveAttribute('aria-current', 'true')
+    expect(first).not.toHaveAttribute('aria-current')
+  })
+
+  it('follows the activeKey when it moves to another item', () => {
+    const { rerender } = render(
+      <List
+        activeKey="o1"
+        itemKey="id"
+        items={orders}
+        renderItem={renderOrder}
+      />,
+    )
+
+    rerender(
+      <List
+        activeKey="o2"
+        itemKey="id"
+        items={orders}
+        renderItem={renderOrder}
+      />,
+    )
+
+    const [first, second] = screen.getAllByRole('listitem')
+
+    expect(first).not.toHaveAttribute('aria-current')
+    expect(second).toHaveAttribute('aria-current', 'true')
+  })
+
+  describe('onItemClick', () => {
+    it('leaves rows inert without it', () => {
+      render(<List itemKey="id" items={orders} renderItem={renderOrder} />)
+
+      const [first] = screen.getAllByTestId('list-item')
+
+      expect(first).not.toHaveAttribute('tabindex')
+      expect(first).not.toHaveClass('cursor-pointer')
+    })
+
+    it('fires with the item and its index on a click on the row', async () => {
+      const user = userEvent.setup()
+      const onItemClick = vi.fn()
+
+      render(
+        <List
+          itemKey="id"
+          items={orders}
+          onItemClick={onItemClick}
+          renderItem={renderOrder}
+        />,
+      )
+
+      await user.click(screen.getByText('Order two'))
+
+      expect(onItemClick).toHaveBeenCalledTimes(1)
+      expect(onItemClick).toHaveBeenCalledWith(orders[1], 1)
+    })
+
+    it('makes rows tab stops that Enter and Space fire', async () => {
+      const user = userEvent.setup()
+      const onItemClick = vi.fn()
+
+      render(
+        <List
+          itemKey="id"
+          items={orders}
+          onItemClick={onItemClick}
+          renderItem={renderOrder}
+        />,
+      )
+
+      await user.tab()
+
+      const [first, second] = screen.getAllByTestId('list-item')
+
+      expect(first).toHaveFocus()
+      expect(first).toHaveClass('focus-visible:ring-3')
+
+      await user.keyboard('{Enter}')
+      await user.tab()
+
+      expect(second).toHaveFocus()
+
+      await user.keyboard(' ')
+
+      expect(onItemClick.mock.calls).toEqual([
+        [orders[0], 0],
+        [orders[1], 1],
+      ])
+    })
+
+    it('leaves a click on a control inside the row to that control', async () => {
+      const user = userEvent.setup()
+      const onItemClick = vi.fn()
+      const onEdit = vi.fn()
+
+      render(
+        <List
+          itemKey="id"
+          items={orders}
+          onItemClick={onItemClick}
+          renderItem={(order) => (
+            <span>
+              {order.label}
+              <button onClick={onEdit} type="button">
+                Edit {order.label}
+              </button>
+              <a href="#details">Details {order.label}</a>
+              <span data-row-click-ignore>Ignore {order.label}</span>
+            </span>
+          )}
+        />,
+      )
+
+      await user.click(
+        screen.getByRole('button', {
+          name: 'Edit Order one',
+        }),
+      )
+      await user.click(screen.getByText('Details Order one'))
+      await user.click(screen.getByText('Ignore Order one'))
+
+      expect(onEdit).toHaveBeenCalledTimes(1)
+      expect(onItemClick).not.toHaveBeenCalled()
+    })
+
+    it('leaves a key pressed on a control inside the row to that control', async () => {
+      const user = userEvent.setup()
+      const onItemClick = vi.fn()
+
+      render(
+        <List
+          itemKey="id"
+          items={orders}
+          onItemClick={onItemClick}
+          renderItem={(order) => (
+            <button type="button">Edit {order.label}</button>
+          )}
+        />,
+      )
+
+      screen
+        .getByRole('button', {
+          name: 'Edit Order one',
+        })
+        .focus()
+      await user.keyboard('{Enter}')
+      await user.keyboard(' ')
+
+      expect(onItemClick).not.toHaveBeenCalled()
+    })
+
+    it('ignores other keys on the row', async () => {
+      const user = userEvent.setup()
+      const onItemClick = vi.fn()
+
+      render(
+        <List
+          itemKey="id"
+          items={orders}
+          onItemClick={onItemClick}
+          renderItem={renderOrder}
+        />,
+      )
+
+      await user.tab()
+      await user.keyboard('a{ArrowDown}')
+
+      expect(onItemClick).not.toHaveBeenCalled()
+    })
   })
 })

@@ -8,7 +8,12 @@
  *   `fallback` renders when it is not
  * - Children as a function: it always renders and receives `enabled`, so the
  *   caller can disable a control instead of hiding it — which is often the
- *   kinder answer, because a button that vanishes teaches nobody anything
+ *   kinder answer, because a button that vanishes teaches nobody anything.
+ *   When the permission is not held it also receives `reason`
+ *   (`labels.protected.denied`), made for a control's `disabledReason`, so
+ *   the control is inert and says why (ARC-ERR-9). While the provider is
+ *   `loading` the renderer gets `loading: true` and no reason — pass it to the
+ *   control's own `loading`; a guarded node renders nothing until then
  * - `mode` decides whether every id is required or any one of them
  * - No ids means enabled: a Protected with nothing to check is a no-op, so a
  *   list can pass a permission through without a special case
@@ -19,10 +24,10 @@
  *   the same question outside JSX
  * - <Protected permissionIds={['user:delete']}><Button /></Protected>
  * - <Protected permissionIds={['booking:cancel']}>
- *     {({ enabled }) => <Button disabled={!enabled}>Cancel</Button>}
+ *     {({ reason }) => <Button disabledReason={reason}>Cancel</Button>}
  *   </Protected>
  *
- * Dependencies: ProtectedProvider
+ * Dependencies: ProtectedProvider, LabelsProvider
  */
 
 import type {

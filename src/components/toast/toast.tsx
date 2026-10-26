@@ -19,8 +19,9 @@ const toastStyles = tv({
     cancelButton: 'toast-cancel-button',
     closeButton: 'toast-close-button',
     content: 'toast-content',
-    description:
-      'toast-description !font-medium !text-sm !text-muted-foreground',
+    // Sonner's own description rules outrank any utility, so its look is set
+    // in index.css against this slot class — see the note there.
+    description: 'toast-description',
     icon: 'toast-icon',
     item: 'toast-item',
     title: 'toast-title font-medium text-sm',
@@ -31,19 +32,19 @@ const toastStyles = tv({
         item: 'toast-default',
       },
       error: {
-        item: 'toast-error !border-l-4 !border-l-destructive',
+        item: 'toast-error',
       },
       info: {
-        item: 'toast-info !border-l-4 !border-l-blue-500',
+        item: 'toast-info',
       },
       loading: {
         item: 'toast-loading',
       },
       success: {
-        item: 'toast-success !border-l-4 !border-l-emerald-500',
+        item: 'toast-success',
       },
       warning: {
-        item: 'toast-warning !border-l-4 !border-l-amber-500',
+        item: 'toast-warning',
       },
     },
   },

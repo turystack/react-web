@@ -43,4 +43,16 @@ describe('LoadingOverlay', () => {
       'true',
     )
   })
+
+  it('paints no veil of its own over the content', () => {
+    render(<LoadingOverlay visible />)
+
+    // A painted background is a guess at the colour underneath, and in dark
+    // mode over a card it guessed black. The content fades instead, by a rule
+    // in the stylesheet that jsdom does not apply — so the class is the proof.
+    const overlay = screen.getByTestId('loading-overlay-root')
+
+    expect(overlay.className).not.toMatch(/(?:^|\s)bg-/)
+    expect(overlay).toHaveClass('loading-overlay-root', 'absolute', 'inset-0')
+  })
 })

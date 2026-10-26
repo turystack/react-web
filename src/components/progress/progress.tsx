@@ -1,8 +1,9 @@
 import { Progress as ProgressPrimitive } from '@base-ui/react/progress'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { tv } from 'tailwind-variants'
 
 import { Label } from '@/components/label'
+import { axes } from '@/support/utils'
 
 import type { ProgressProps } from './progress.types'
 
@@ -40,7 +41,13 @@ const progressStyles = tv({
   },
 })
 
-function Progress({ value, defaultValue, size, label }: ProgressProps) {
+function Progress({
+  ariaLabel,
+  value,
+  defaultValue,
+  size,
+  label,
+}: ProgressProps) {
   const {
     root,
     label: labelCls,
@@ -51,21 +58,38 @@ function Progress({ value, defaultValue, size, label }: ProgressProps) {
   })
 
   const [uncontrolledValue] = useState<number | null>(defaultValue ?? null)
+  const labelId = useId()
   const { content: labelText, ...labelProps } =
     typeof label === 'string'
       ? {
           content: label,
         }
       : (label ?? {})
+  // The bar needs a name of its own: the visible label sits beside it as a
+  // plain <label> with nothing to point at. `ariaLabel` wins; otherwise the
+  // visible label names it by reference, so the two can never disagree.
+  const naming = ariaLabel
+    ? {
+        'aria-label': ariaLabel,
+      }
+    : labelText
+      ? {
+          'aria-labelledby': labelId,
+        }
+      : {}
 
   return (
     <ProgressPrimitive.Root
+      {...naming}
       className={root()}
+      {...axes(progressStyles, {
+        size,
+      })}
       data-testid="progress-root"
       value={value ?? uncontrolledValue}
     >
       {labelText && (
-        <div className={labelCls()} data-testid="progress-label">
+        <div className={labelCls()} data-testid="progress-label" id={labelId}>
           <Label {...labelProps}>{labelText}</Label>
         </div>
       )}

@@ -137,6 +137,25 @@ describe.each(['error', 'info', 'loading', 'success', 'warning'] as const)(
   },
 )
 
+// The edge itself is painted in index.css against these slot classes, from
+// the status tokens: sonner's unlayered stylesheet outranks any utility.
+describe.each(['error', 'info', 'success', 'warning'] as const)(
+  'Toast %s edge',
+  (variant) => {
+    it('marks the item for the edge rule without an !important utility', async () => {
+      render(<Toast />)
+
+      toast[variant](`${variant} edge`)
+      await screen.findByText(`${variant} edge`)
+
+      const item = screen.getByRole('listitem')
+      expect(item).toHaveClass('toast-item', `toast-${variant}`)
+      expect(item.className).not.toMatch(/(^|\s)!/)
+      expect(item.className).not.toMatch(/\b(emerald|amber|green|blue|red)-\d/)
+    })
+  },
+)
+
 describe.each([
   'bottom-center',
   'bottom-left',

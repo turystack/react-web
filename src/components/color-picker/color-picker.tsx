@@ -7,9 +7,11 @@ import {
   useState,
 } from 'react'
 import { tv } from 'tailwind-variants'
+import { useFormFieldControl } from '@/components/form/form.context'
 import { useLabels } from '@/components/labels-provider'
 import { usePortalContainer } from '@/components/portal-provider'
 import { Check, ChevronDown } from '@/internal/icons'
+import { axes } from '@/support/utils'
 
 import type { ColorPickerProps } from './color-picker.types'
 
@@ -60,6 +62,7 @@ function normalizeHex(input: string): string | null {
 const colorPicker = tv({
   defaultVariants: {
     size: 'md',
+    triggerVariant: 'input',
   },
   slots: {
     checkIcon: 'color-picker-check-icon size-3.5 text-white drop-shadow-sm',
@@ -97,18 +100,38 @@ const colorPicker = tv({
       'data-[selected=true]:ring-2 data-[selected=true]:ring-foreground data-[selected=true]:ring-offset-1 data-[selected=true]:ring-offset-popover',
     ],
     trigger: [
-      'color-picker-trigger flex w-full min-w-0 items-center gap-2',
-      'rounded-lg border border-input bg-transparent px-2.5 py-1 text-left',
-      'text-base outline-none transition-colors md:text-sm',
-      'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
-      'data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/50',
-      'disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50',
-      'aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20',
-      'dark:bg-input/30 dark:disabled:bg-input/80',
-      'dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40',
+      'color-picker-trigger min-w-0 items-center gap-2 text-left',
+      'outline-none transition-colors',
+      'focus-visible:ring-3 focus-visible:ring-ring/50',
+      'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
+      'aria-invalid:ring-3 aria-invalid:ring-destructive/20',
+      'dark:aria-invalid:ring-destructive/40',
     ],
     valueText: 'color-picker-value-text truncate font-mono uppercase',
   },
+  compoundVariants: [
+    {
+      class: {
+        trigger: 'h-11',
+      },
+      size: 'lg',
+      triggerVariant: 'input',
+    },
+    {
+      class: {
+        trigger: 'h-10',
+      },
+      size: 'md',
+      triggerVariant: 'input',
+    },
+    {
+      class: {
+        trigger: 'h-9',
+      },
+      size: 'sm',
+      triggerVariant: 'input',
+    },
+  ],
   variants: {
     empty: {
       true: {
@@ -128,15 +151,29 @@ const colorPicker = tv({
     size: {
       lg: {
         previewSwatch: 'size-5',
-        trigger: 'h-11',
       },
       md: {
-        previewSwatch: 'size-[18px]',
-        trigger: 'h-10',
+        previewSwatch: 'size-4.5',
       },
       sm: {
         previewSwatch: 'size-4',
-        trigger: 'h-9',
+      },
+    },
+    triggerVariant: {
+      bare: {
+        trigger: 'inline-flex w-auto cursor-pointer rounded-md',
+      },
+      input: {
+        trigger: [
+          'flex w-full rounded-lg border border-input bg-transparent px-2.5 py-1',
+          'text-base md:text-sm',
+          'focus-visible:border-ring',
+          'data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/50',
+          'disabled:bg-input/50',
+          'aria-invalid:border-destructive',
+          'dark:bg-input/30 dark:disabled:bg-input/80',
+          'dark:aria-invalid:border-destructive/50',
+        ],
       },
     },
   },
@@ -165,8 +202,6 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
       invalid,
       name,
       id,
-      className,
-      popupClassName,
       open,
       defaultOpen,
       onOpenChange,
@@ -174,11 +209,17 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
       sideOffset = 4,
       align = 'start',
       renderTrigger,
-      'aria-label': ariaLabel,
+      triggerVariant = renderTrigger ? 'bare' : 'input',
+      ariaLabel,
     },
     ref,
   ) {
     const labels = useLabels()
+    // Form.Field's id, description/error ids and error state, unless given.
+    const control = useFormFieldControl({
+      id,
+      invalid,
+    })
     const portalContainer = usePortalContainer()
     const {
       checkIcon,
@@ -192,6 +233,7 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
       valueText,
     } = colorPicker({
       size,
+      triggerVariant,
     })
     const isControlled = value !== undefined
     const [internalValue, setInternalValue] = useState<string | null>(
@@ -310,17 +352,20 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
         <PopoverPrimitive.Trigger
           render={
             <button
-              aria-invalid={invalid || undefined}
+              aria-describedby={control.describedBy}
+              aria-invalid={control.invalid || undefined}
               aria-label={ariaLabel}
-              className={trigger({
-                className,
-              })}
+              className={trigger()}
               data-testid="color-picker-trigger"
               disabled={disabled}
-              id={id}
+              id={control.id}
               name={name}
               ref={ref}
               type="button"
+              {...axes(colorPicker, {
+                size,
+                triggerVariant,
+              })}
             />
           }
         >
@@ -334,9 +379,7 @@ const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
             sideOffset={sideOffset}
           >
             <PopoverPrimitive.Popup
-              className={popup({
-                className: popupClassName,
-              })}
+              className={popup()}
               data-testid="color-picker-popup"
             >
               <div className={grid()} data-testid="color-picker-grid">

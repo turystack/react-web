@@ -77,3 +77,46 @@ describe.each([true, false])('Container centered %s', (centered) => {
     expect(screen.getByText('Page content')).toBeInTheDocument()
   })
 })
+
+describe('Container paddingX', () => {
+  it('adds no gutter when none is asked for, as before', () => {
+    render(<Container>Page content</Container>)
+
+    const root = screen.getByTestId('container-root')
+    expect(root).toHaveClass('px-0')
+    expect(root).not.toHaveClass('px-4', 'px-6', 'px-8')
+  })
+
+  it.each([
+    ['none', 'px-0'],
+    ['sm', 'px-4'],
+    ['md', 'px-6'],
+    ['lg', 'px-8'],
+  ] as const)('pads the sides by the %s step', (paddingX, expected) => {
+    render(
+      <Container maxWidth="lg" paddingX={paddingX}>
+        Page content
+      </Container>,
+    )
+
+    const root = screen.getByTestId('container-root')
+    expect(root).toHaveClass(expected, 'max-w-6xl', 'mx-auto')
+    expect(root).toContainElement(screen.getByText('Page content'))
+  })
+})
+
+describe('Container id', () => {
+  it('puts the id on the element so an anchor link can reach it', () => {
+    render(<Container id="pricing">Pricing</Container>)
+
+    const root = screen.getByTestId('container-root')
+    expect(root).toHaveAttribute('id', 'pricing')
+    expect(document.getElementById('pricing')).toBe(root)
+  })
+
+  it('renders no id attribute when none is given', () => {
+    render(<Container>Pricing</Container>)
+
+    expect(screen.getByTestId('container-root')).not.toHaveAttribute('id')
+  })
+})

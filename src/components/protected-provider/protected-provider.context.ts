@@ -9,5 +9,6 @@ import type { PermissionsContextValue } from './protected-provider.types'
  */
 export const PermissionsContext = createContext<PermissionsContextValue>({
   can: (permissionIds) => permissionIds.length === 0,
+  loading: false,
   permissions: [],
 })

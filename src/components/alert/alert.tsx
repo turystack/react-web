@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
+import { useLabels } from '@/components/labels-provider'
 import { X } from '@/internal/icons'
 
 import type {
@@ -23,6 +24,7 @@ const CLOSE_DURATION_MS = 200
 
 const alert = tv({
   defaultVariants: {
+    layout: 'card',
     variant: 'default',
   },
   slots: {
@@ -44,16 +46,9 @@ const alert = tv({
       'alert-icon col-start-1 row-span-2 row-start-1 mr-2 translate-y-0.5 text-current',
       '[&_svg:not([class*=size-])]:size-4',
     ],
-    /**
-     * Four `auto` columns and one `1fr`: an absent icon, action or close button
-     * leaves its column zero-wide, and the spacing rides on the parts' own
-     * margins rather than a column gap that would otherwise open a hole where
-     * the missing part used to be.
-     */
     root: [
       'alert-root',
-      'group/alert relative grid w-full grid-cols-[auto_1fr_auto_auto] gap-y-0.5',
-      'rounded-lg border px-2.5 py-2',
+      'group/alert relative w-full',
       'text-left text-sm transition-all duration-200',
     ],
     title: [
@@ -62,6 +57,42 @@ const alert = tv({
     ],
   },
   variants: {
+    layout: {
+      /**
+       * A strip across the top of the shell. Flex, not the card's grid: the
+       * grid stacks the description under the title, and a banner is one line
+       * by definition. The gap spaces whatever parts are present, the action
+       * rides `ml-auto` to the far edge, and the description is the one part
+       * that gives way — it truncates instead of wrapping the strip taller.
+       * Only the bottom border survives: the banner meets the window on three
+       * sides and the shell on one.
+       */
+      banner: {
+        action: 'ml-auto self-center',
+        close: 'ml-0 self-center',
+        description: 'min-w-0 flex-1 truncate',
+        icon: 'mr-0 translate-y-0 self-center',
+        root: 'flex min-h-9 items-center gap-x-2 rounded-none border-0 border-b px-4 py-1.5',
+        title: 'shrink-0 whitespace-nowrap',
+      },
+      /**
+       * Four `auto` columns and one `1fr`: an absent icon, action or close button
+       * leaves its column zero-wide, and the spacing rides on the parts' own
+       * margins rather than a column gap that would otherwise open a hole where
+       * the missing part used to be.
+       */
+      card: {
+        root: 'grid grid-cols-[auto_1fr_auto_auto] gap-y-0.5 rounded-lg border px-2.5 py-2',
+      },
+    },
+    /**
+     * Each status tone is its theme token — `success`, `warning`, or `primary`
+     * for info, so info is the brand's colour in every theme — at a low alpha
+     * for the surface and the border, and full strength for the icon. On a
+     * tinted surface the description drops `muted-foreground` for the card's
+     * own ink at 80%: the grey measured 4.1–4.2:1 on the tints in the light scheme,
+     * under AA, while the 80% ink holds above 9:1 in both schemes.
+     */
     variant: {
       default: {
         root: 'bg-card text-card-foreground',
@@ -70,6 +101,21 @@ const alert = tv({
         description: 'text-destructive/90',
         icon: 'text-current',
         root: 'bg-card text-destructive',
+      },
+      info: {
+        description: 'text-card-foreground/80',
+        icon: 'text-primary',
+        root: 'border-primary/30 bg-primary/5 text-card-foreground',
+      },
+      success: {
+        description: 'text-card-foreground/80',
+        icon: 'text-success',
+        root: 'border-success/30 bg-success/10 text-card-foreground',
+      },
+      warning: {
+        description: 'text-card-foreground/80',
+        icon: 'text-warning',
+        root: 'border-warning/30 bg-warning/10 text-card-foreground',
       },
     },
   },
@@ -81,15 +127,18 @@ const AlertContext = createContext<AlertSlots>({} as AlertSlots)
 
 function AlertRoot({
   children,
-  variant,
+  variant = 'default',
+  layout = 'card',
   closable,
   onClose,
 }: PropsWithChildren<AlertProps>) {
+  const labels = useLabels()
   const [visible, setVisible] = useState(true)
   const [closing, setClosing] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
   const { root, ...slots } = alert({
+    layout,
     variant,
   })
 
@@ -117,11 +166,15 @@ function AlertRoot({
       <div
         className={root()}
         data-closing={closing || undefined}
+        data-layout={layout}
         data-slot="alert"
         data-testid="alert-root"
+        data-variant={variant}
         onTransitionEnd={closing ? finishClose : undefined}
         ref={rootRef}
-        role="alert"
+        // A banner is on every screen for as long as the condition lasts; an
+        // assertive `alert` would interrupt each page it appears on to say so.
+        role={layout === 'banner' ? 'status' : 'alert'}
         style={
           closing
             ? {
@@ -135,7 +188,7 @@ function AlertRoot({
         {closable && (
           <div className={slots.close()} data-testid="alert-close">
             <Button
-              ariaLabel="Close"
+              ariaLabel={labels.common.close}
               onClick={handleClose}
               size="icon-sm"
               variant="ghost"
@@ -152,7 +205,8 @@ function AlertRoot({
 function AlertIcon({ children }: PropsWithChildren<AlertIconProps>) {
   const { icon } = useContext(AlertContext)
   return (
-    <div className={icon()} data-testid="alert-icon">
+    // Decorative: the title and the description carry the message.
+    <div aria-hidden className={icon()} data-testid="alert-icon">
       {children}
     </div>
   )

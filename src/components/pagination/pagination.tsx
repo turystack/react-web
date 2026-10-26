@@ -19,7 +19,7 @@ const styles = tv({
   slots: {
     ellipsis:
       'pagination-ellipsis flex size-8 items-center justify-center text-muted-foreground',
-    info: 'pagination-info whitespace-nowrap text-muted-foreground text-sm',
+    info: 'pagination-info mr-2 whitespace-nowrap text-muted-foreground text-sm',
     pageBtn: [
       'pagination-page-btn inline-flex size-9 items-center justify-center rounded-lg border text-sm',
       'select-none outline-none transition-colors',
@@ -27,13 +27,31 @@ const styles = tv({
       'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
     ],
     pageBtnActive: 'pagination-page-btn-active border-border bg-muted',
-    root: 'pagination-root flex w-full items-center justify-between gap-4',
+    // The page-number list needs ~19rem on its own; below 28rem of pagination
+    // it is hidden and prev/next (with the range text) carry the navigation.
+    pages: 'pagination-pages hidden items-center gap-1 @md/pagination:flex',
+    // Narrow (a phone column, a side panel): the rows-per-page picker keeps the
+    // first line and the controls wrap under it, pushed to the right edge; the
+    // controls wrap once more (range text above the buttons) when even they do
+    // not fit. Nothing overflows.
+    root: 'pagination-root @container/pagination flex w-full min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2',
+    controls:
+      'pagination-controls ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1',
     rowsPerPage:
       'pagination-rows-per-page flex items-center gap-2 whitespace-nowrap text-muted-foreground text-sm',
   },
 })
 
-const { root, info, rowsPerPage, pageBtn, pageBtnActive, ellipsis } = styles()
+const {
+  controls,
+  root,
+  info,
+  pages,
+  rowsPerPage,
+  pageBtn,
+  pageBtnActive,
+  ellipsis,
+} = styles()
 
 function getVisiblePages(page: number, totalPages: number): (number | '...')[] {
   if (totalPages <= 7) {
@@ -87,13 +105,14 @@ function Pagination(props: PaginationProps) {
 
     return (
       <nav
-        aria-label="pagination"
+        aria-label={labels.pagination.label}
         className={root()}
         data-testid="pagination-root"
       >
         <div className={rowsPerPage()}>
           <span>{labels.pagination.rowsPerPage}</span>
           <Select
+            ariaLabel={labels.pagination.rowsPerPage}
             clearable={false}
             mode="single"
             onChange={(v) => {
@@ -107,16 +126,12 @@ function Pagination(props: PaginationProps) {
             value={rpp}
           />
         </div>
-        <div className="pagination-controls flex items-center gap-1">
-          <span
-            className={info({
-              className: 'mr-2',
-            })}
-          >
+        <div className={controls()} data-testid="pagination-controls">
+          <span className={info()} data-testid="pagination-info">
             {labels.pagination.range(from, to, total)}
           </span>
           <Button
-            ariaLabel="Previous page"
+            ariaLabel={labels.pagination.previous}
             data-testid="pagination-prev"
             disabled={isFirst}
             onClick={() => onPageChange(page - 1)}
@@ -125,28 +140,30 @@ function Pagination(props: PaginationProps) {
           >
             <ChevronLeft className="pagination-prev-icon size-4" />
           </Button>
-          {getVisiblePages(page, totalPages).map((p, i) =>
-            p === '...' ? (
-              <span className={ellipsis()} key={`ellipsis-${i}`}>
-                <MoreHorizontal className="pagination-ellipsis-icon size-4" />
-              </span>
-            ) : (
-              <button
-                aria-current={p === page ? 'page' : undefined}
-                className={pageBtn({
-                  className: p === page ? pageBtnActive() : undefined,
-                })}
-                data-testid="pagination-page"
-                key={p}
-                onClick={() => onPageChange(p)}
-                type="button"
-              >
-                {p}
-              </button>
-            ),
-          )}
+          <span className={pages()} data-testid="pagination-pages">
+            {getVisiblePages(page, totalPages).map((p, i) =>
+              p === '...' ? (
+                <span className={ellipsis()} key={`ellipsis-${i}`}>
+                  <MoreHorizontal className="pagination-ellipsis-icon size-4" />
+                </span>
+              ) : (
+                <button
+                  aria-current={p === page ? 'page' : undefined}
+                  className={pageBtn({
+                    className: p === page ? pageBtnActive() : undefined,
+                  })}
+                  data-testid="pagination-page"
+                  key={p}
+                  onClick={() => onPageChange(p)}
+                  type="button"
+                >
+                  {p}
+                </button>
+              ),
+            )}
+          </span>
           <Button
-            ariaLabel="Next page"
+            ariaLabel={labels.pagination.next}
             data-testid="pagination-next"
             disabled={isLast}
             onClick={() => onPageChange(page + 1)}
@@ -172,7 +189,7 @@ function Pagination(props: PaginationProps) {
 
   return (
     <nav
-      aria-label="pagination"
+      aria-label={labels.pagination.label}
       className={root()}
       data-testid="pagination-root"
     >
@@ -180,6 +197,7 @@ function Pagination(props: PaginationProps) {
         <div className={rowsPerPage()}>
           <span>{labels.pagination.rowsPerPage}</span>
           <Select
+            ariaLabel={labels.pagination.rowsPerPage}
             clearable={false}
             mode="single"
             onChange={(v) => onRowsPerPageChange(v as number)}
@@ -193,9 +211,14 @@ function Pagination(props: PaginationProps) {
       ) : (
         <div />
       )}
-      <div className="pagination-controls flex items-center gap-2">
+      <div
+        className={controls({
+          className: 'gap-2',
+        })}
+        data-testid="pagination-controls"
+      >
         <Button
-          ariaLabel="Previous page"
+          ariaLabel={labels.pagination.previous}
           data-testid="pagination-prev"
           disabled={!hasPreviousPage}
           onClick={() => onPreviousPage?.()}
@@ -205,7 +228,7 @@ function Pagination(props: PaginationProps) {
           <ChevronLeft className="pagination-prev-icon size-4" />
         </Button>
         <Button
-          ariaLabel="Next page"
+          ariaLabel={labels.pagination.next}
           data-testid="pagination-next"
           disabled={!hasNextPage}
           onClick={() => onNextPage?.()}

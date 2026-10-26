@@ -6,12 +6,12 @@ import type { LoadingOverlayProps } from './loading-overlay.types'
 
 const loadingOverlay = tv({
   slots: {
-    // `rounded-[inherit]`, because the veil is a rectangle and its host is not.
-    // `inset-0` stops at the padding box, so the border itself is never covered
-    // — except at the corners, where a square sheet paints over the arc the
-    // radius draws. The edges stayed crisp and the four corners washed out,
-    // which reads as the whole border going transparent.
-    root: 'loading-overlay-root absolute inset-0 z-50 flex items-center justify-center rounded-[inherit] bg-background/80 transition-opacity',
+    // Transparent, always. It holds the spinner and takes the pointer; the
+    // fading is done to the host's content by opacity (see `index.css`). A
+    // painted veil was `bg-background/80`, a guess at the colour underneath —
+    // over a card in dark mode that is a near-black sheet, edge to edge, on a
+    // lighter surface.
+    root: 'loading-overlay-root absolute inset-0 z-50 flex items-center justify-center rounded-[inherit]',
   },
   variants: {
     visible: {

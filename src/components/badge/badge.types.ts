@@ -7,7 +7,10 @@
  * Behavior:
  * - Displays as inline-flex, rounded-full pill shape
  * - Loading state: content becomes invisible, spinner overlays center, clicks blocked
- * - Variants: default (primary bg), secondary, destructive (red), outline (border only)
+ * - Variants: default (primary bg), secondary, outline (border only), solid;
+ *   status variants (destructive, success, warning, info and their solid-*
+ *   forms) paint with the theme's status tokens and hold AA contrast in light
+ *   and dark; purple, pink, teal and orange are categorical tags
  * - Sizes: sm, md (default), lg — height, padding, type scale and icon/spinner size
  * - Block mode makes badge full-width
  * - onClick turns the badge into a button, so it is reachable by keyboard

@@ -1069,9 +1069,15 @@ describe('Select mode multiple', () => {
       />,
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove Apple' }))
+    const [removeApple] = screen.getAllByTestId('select-value-remove')
+    // A pointer shortcut only: not a control nested in the trigger button.
+    expect(removeApple).toHaveAttribute('aria-hidden', 'true')
+    expect(removeApple).not.toHaveAttribute('tabindex')
+    await userEvent.click(removeApple)
 
     expect(onChange).toHaveBeenCalledWith(['b2'])
+    // The badge's click does not open the list.
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
   })
 
   it('clears every value at once', async () => {
@@ -1106,7 +1112,7 @@ describe('Select mode multiple', () => {
       />,
     )
 
-    await userEvent.tab()
+    // Trigger, then the clear button: the badges hold no tab stop.
     await userEvent.tab()
     await userEvent.tab()
     expect(screen.getByRole('button', { name: 'Clear' })).toHaveFocus()
@@ -2365,4 +2371,246 @@ describe('Select outcome', () => {
     expect(await screen.findByText('Apple')).toBeTruthy()
     expect(screen.getByTestId('select-load-more-error')).toBeTruthy()
   })
+})
+
+describe('Select width', () => {
+  it('fills its column by default and may shrink there', () => {
+    render(
+      <Select
+        mode="single"
+        optionLabel="name"
+        optionValue="id"
+        options={fruits}
+      />,
+    )
+
+    const trigger = screen.getByRole('combobox')
+    expect(trigger).toHaveAttribute('data-width', 'full')
+    expect(trigger).toHaveClass('w-full', 'min-w-0')
+  })
+
+  it('fits the selected label with width=auto and refuses to shrink below it', () => {
+    render(
+      <div style={{ display: 'flex' }}>
+        <Select
+          defaultValue="b2"
+          mode="single"
+          optionLabel="name"
+          optionValue="id"
+          options={fruits}
+          width="auto"
+        />
+      </div>,
+    )
+
+    const trigger = screen.getByRole('combobox')
+    expect(trigger).toHaveTextContent('Banana')
+    expect(trigger).toHaveAttribute('data-width', 'auto')
+    expect(trigger).toHaveClass('w-fit', 'shrink-0')
+    expect(trigger).not.toHaveClass('w-full')
+    expect(trigger).not.toHaveClass('min-w-0')
+  })
+
+  it.each([
+    ['sm', 'w-56'],
+    ['md', 'w-72'],
+    ['lg', 'w-96'],
+  ] as const)('takes the %s preset', (width, token) => {
+    render(
+      <Select
+        mode="single"
+        optionLabel="name"
+        optionValue="id"
+        options={fruits}
+        width={width}
+      />,
+    )
+
+    const trigger = screen.getByRole('combobox')
+    expect(trigger).toHaveAttribute('data-width', width)
+    expect(trigger).toHaveClass(token, 'shrink-0')
+    expect(trigger).not.toHaveClass('w-full')
+  })
+
+  it('sizes the searchable single trigger too', () => {
+    render(
+      <Select
+        mode="single"
+        optionLabel="name"
+        optionValue="id"
+        options={fruits}
+        searchable
+        width="auto"
+      />,
+    )
+
+    expect(screen.getByRole('combobox')).toHaveClass('w-fit', 'shrink-0')
+  })
+
+  it('sizes the multiple trigger too', () => {
+    render(
+      <Select
+        mode="multiple"
+        optionLabel="name"
+        optionValue="id"
+        options={fruits}
+        width="md"
+      />,
+    )
+
+    expect(screen.getByRole('combobox')).toHaveClass('w-72')
+  })
+})
+
+describe.each([
+  ['single', {}],
+  ['single searchable', { searchable: true }],
+  ['multiple', { mode: 'multiple' as const }],
+] as const)('Select trigger naming (%s)', (_name, extra) => {
+  const base = {
+    mode: 'single' as const,
+    optionLabel: 'name' as const,
+    optionValue: 'id' as const,
+    options: fruits,
+  }
+
+  it('is named by ariaLabel', () => {
+    render(<Select {...base} {...extra} ariaLabel="Billing interval" />)
+
+    expect(
+      screen.getByRole('combobox', { name: 'Billing interval' }),
+    ).toBeInTheDocument()
+  })
+
+  it('is named by a label pointing at its id', () => {
+    render(
+      <>
+        <label htmlFor="interval">Interval</label>
+        <Select {...base} {...extra} id="interval" />
+      </>,
+    )
+
+    const trigger = screen.getByRole('combobox', { name: 'Interval' })
+    expect(trigger).toHaveAttribute('id', 'interval')
+  })
+
+  it('carries no aria-label and no given id without them', () => {
+    render(<Select {...base} {...extra} />)
+
+    const trigger = screen.getByRole('combobox')
+    expect(trigger).not.toHaveAttribute('aria-label')
+    expect(trigger.getAttribute('id') ?? '').not.toBe('interval')
+  })
+})
+
+describe.each([
+  ['single', {}],
+  ['single searchable', { searchable: true }],
+  ['multiple', { mode: 'multiple' as const }],
+] as const)('Select clear control (%s)', (_name, extra) => {
+  const base = {
+    mode: 'single' as const,
+    optionLabel: 'name' as const,
+    optionValue: 'id' as const,
+    options: fruits,
+  }
+  const selected =
+    'mode' in extra ? { defaultValue: ['a1'] } : { defaultValue: 'a1' }
+
+  it('is a sibling button, with nothing interactive inside the trigger', () => {
+    render(<Select {...base} {...extra} {...(selected as object)} />)
+
+    const trigger = screen.getByRole('combobox')
+    const clear = screen.getByRole('button', { name: 'Clear' })
+    expect(clear.tagName).toBe('BUTTON')
+    expect(clear).toHaveAttribute('type', 'button')
+    expect(trigger).not.toContainElement(clear)
+    expect(trigger.parentElement).toContainElement(clear)
+    expect(
+      trigger.querySelector(
+        'button, [role="button"], a[href], input, [tabindex]:not([tabindex="-1"])',
+      ),
+    ).toBeNull()
+  })
+
+  it('hands focus back to the trigger once it clears', async () => {
+    render(<Select {...base} {...extra} {...(selected as object)} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(
+      screen.queryByRole('button', { name: 'Clear' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox')).toHaveFocus()
+    // Clearing does not open the list.
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+  })
+
+  it('is named by the common clear label', () => {
+    render(
+      <TuryProvider labels={{ common: { clear: 'Limpar' } }}>
+        <Select {...base} {...extra} {...(selected as object)} />
+      </TuryProvider>,
+    )
+
+    expect(screen.getByRole('button', { name: 'Limpar' })).toBeInTheDocument()
+  })
+
+  it('gives way to a rightSection', () => {
+    render(
+      <Select
+        {...base}
+        {...extra}
+        {...(selected as object)}
+        rightSection={<span>kg</span>}
+      />,
+    )
+
+    expect(
+      screen.queryByRole('button', { name: 'Clear' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('kg')).toBeInTheDocument()
+  })
+})
+
+describe('Select axes', () => {
+  it('publishes its default size and variant for a theme to select', () => {
+    render(
+      <Select
+        mode="single"
+        optionLabel="name"
+        optionValue="id"
+        options={fruits}
+      />,
+    )
+
+    const root = screen.getByTestId('select-root')
+    expect(root).toHaveAttribute('data-size', 'md')
+    expect(root).toHaveAttribute('data-variant', 'default')
+  })
+
+  it.each([
+    ['single', {}],
+    ['single searchable', { searchable: true }],
+    ['multiple', { mode: 'multiple' as const }],
+  ] as const)(
+    'publishes the size and variant it was given (%s)',
+    (_name, extra) => {
+      render(
+        <Select
+          mode="single"
+          optionLabel="name"
+          optionValue="id"
+          options={fruits}
+          size="lg"
+          variant="ghost"
+          {...extra}
+        />,
+      )
+
+      const root = screen.getByTestId('select-root')
+      expect(root).toHaveAttribute('data-size', 'lg')
+      expect(root).toHaveAttribute('data-variant', 'ghost')
+    },
+  )
 })

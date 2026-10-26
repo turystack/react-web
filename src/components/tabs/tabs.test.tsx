@@ -18,6 +18,28 @@ function renderTabs(props: React.ComponentProps<typeof Tabs> = {}) {
 }
 
 describe('Tabs', () => {
+  it('names the tablist with ariaLabel', () => {
+    render(
+      <Tabs defaultValue="a">
+        <Tabs.List ariaLabel="Account sections">
+          <Tabs.Trigger value="a">Tab A</Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="a">Panel A</Tabs.Content>
+      </Tabs>,
+    )
+
+    expect(
+      screen.getByRole('tablist', { name: 'Account sections' }),
+    ).toBeInTheDocument()
+  })
+
+  it('leaves the tablist unnamed without ariaLabel', () => {
+    renderTabs({ defaultValue: 'a' })
+
+    expect(screen.getByRole('tablist')).not.toHaveAttribute('aria-label')
+    expect(screen.getByRole('tablist')).toHaveAccessibleName('')
+  })
+
   it('shows the panel of the tab that starts active', () => {
     renderTabs({ defaultValue: 'a' })
 
@@ -260,6 +282,79 @@ describe('Tabs block', () => {
     expect(screen.getByRole('tablist')).toHaveAttribute('data-block', 'true')
   })
 
+  it('aligns the triggers of a full-width rail to the start by default', () => {
+    renderTabs({ block: true, defaultValue: 'a' })
+
+    const list = screen.getByRole('tablist')
+    expect(list).toHaveAttribute('data-justify', 'start')
+    expect(list).toHaveClass('justify-start')
+    expect(list).not.toHaveClass('justify-center')
+  })
+
+  it.each([
+    ['center', 'justify-center'],
+    ['between', 'justify-between'],
+  ] as const)('distributes the triggers with justify=%s', (justify, token) => {
+    renderTabs({ block: true, defaultValue: 'a', justify })
+
+    const list = screen.getByRole('tablist')
+    expect(list).toHaveAttribute('data-justify', justify)
+    expect(list).toHaveClass(token)
+    expect(list).not.toHaveClass('justify-start')
+  })
+
+  it('lets the list override the justify it inherits from the root', () => {
+    render(
+      <Tabs block defaultValue="a" justify="center">
+        <Tabs.List block justify="between">
+          <Tabs.Trigger value="a">Tab A</Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="a">Panel A</Tabs.Content>
+      </Tabs>,
+    )
+
+    expect(screen.getByRole('tablist')).toHaveAttribute(
+      'data-justify',
+      'between',
+    )
+  })
+
+  it('inherits justify from the root', () => {
+    render(
+      <Tabs block defaultValue="a" justify="center">
+        <Tabs.List>
+          <Tabs.Trigger value="a">Tab A</Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="a">Panel A</Tabs.Content>
+      </Tabs>,
+    )
+
+    expect(screen.getByRole('tablist')).toHaveAttribute(
+      'data-justify',
+      'center',
+    )
+  })
+
+  it('leaves justify out of a rail that is not block', () => {
+    renderTabs({ defaultValue: 'a' })
+
+    expect(screen.getByRole('tablist')).not.toHaveAttribute('data-justify')
+  })
+
+  it('refuses justify without block', () => {
+    render(
+      // @ts-expect-error justify only applies to a block rail
+      <Tabs defaultValue="a" justify="center">
+        <Tabs.List>
+          <Tabs.Trigger value="a">Tab A</Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="a">Panel A</Tabs.Content>
+      </Tabs>,
+    )
+
+    expect(screen.getByRole('tablist')).not.toHaveAttribute('data-justify')
+  })
+
   it('refuses block together with justified', () => {
     render(
       // @ts-expect-error block and justified are mutually exclusive
@@ -286,5 +381,157 @@ describe('Tabs block', () => {
     )
 
     expect(screen.getByRole('tablist')).toHaveAttribute('data-block', 'true')
+  })
+})
+
+describe('Tabs axes', () => {
+  it('publishes its default variant for a theme to select', () => {
+    renderTabs({ defaultValue: 'a' })
+
+    expect(screen.getByTestId('tabs-root')).toHaveAttribute(
+      'data-variant',
+      'line',
+    )
+    expect(screen.getByRole('tablist')).toHaveAttribute('data-variant', 'line')
+  })
+
+  it('publishes the variant it was given, and a list override on the list', () => {
+    render(
+      <Tabs defaultValue="a" variant="pill">
+        <Tabs.List variant="line">
+          <Tabs.Trigger value="a">Tab A</Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="a">Panel A</Tabs.Content>
+      </Tabs>,
+    )
+
+    expect(screen.getByTestId('tabs-root')).toHaveAttribute(
+      'data-variant',
+      'pill',
+    )
+    expect(screen.getByRole('tablist')).toHaveAttribute('data-variant', 'line')
+  })
+})
+
+describe('Tabs disabledReason', () => {
+  const reason = 'Upgrade to see billing'
+
+  function renderBlocked(onChange = vi.fn()) {
+    render(
+      <Tabs defaultValue="a" onChange={onChange}>
+        <Tabs.List>
+          <Tabs.Trigger value="a">Tab A</Tabs.Trigger>
+          <Tabs.Trigger disabledReason={reason} value="b">
+            Billing
+          </Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="a">Panel A</Tabs.Content>
+        <Tabs.Content value="b">Panel B</Tabs.Content>
+      </Tabs>,
+    )
+    return screen.getByRole('tab', { name: 'Billing' })
+  }
+
+  it('renders no wrapper and no description without a reason', () => {
+    renderTabs({ defaultValue: 'a' })
+
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab).not.toHaveAttribute('aria-describedby')
+    }
+    expect(
+      document.querySelector('[data-slot="disabled-reason"]'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('is blocked but arrow keys still reach it', async () => {
+    const onChange = vi.fn()
+    const tab = renderBlocked(onChange)
+
+    expect(tab).toHaveAttribute('aria-disabled', 'true')
+    expect(tab).not.toHaveAttribute('disabled')
+
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowRight}')
+    expect(tab).toHaveFocus()
+
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard(' ')
+    await userEvent.click(tab, { pointerEventsCheck: 0 })
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('Panel A')
+  })
+
+  it('is described by the reason before any tooltip opens', () => {
+    expect(renderBlocked()).toHaveAccessibleDescription(reason)
+  })
+
+  it('shows the reason when keyboard focus reaches it', async () => {
+    renderBlocked()
+
+    await userEvent.tab()
+    expect(
+      screen.queryByTestId('disabled-reason-popup'),
+    ).not.toBeInTheDocument()
+    await userEvent.keyboard('{ArrowRight}')
+
+    expect(
+      await screen.findByTestId('disabled-reason-popup'),
+    ).toHaveTextContent(reason)
+  })
+
+  it('stretches its wrapper like a trigger in a justified list', () => {
+    renderBlocked()
+
+    expect(screen.getByRole('tablist')).toHaveClass(
+      '*:data-[slot=disabled-reason]:flex-1',
+    )
+  })
+})
+
+describe('Tabs.Trigger disabledReason, edge cases', () => {
+  const reason = 'Upgrade to see reports'
+
+  function Reports({ blocked }: { blocked: boolean }) {
+    return (
+      <Tabs defaultValue="a">
+        <Tabs.List>
+          <Tabs.Trigger value="a">Overview</Tabs.Trigger>
+          <Tabs.Trigger disabledReason={blocked ? reason : undefined} value="b">
+            Reports
+          </Tabs.Trigger>
+        </Tabs.List>
+      </Tabs>
+    )
+  }
+
+  it('keeps focus when a reason arrives on the focused trigger', async () => {
+    const { rerender } = render(<Reports blocked={false} />)
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowRight}')
+    const reports = () => screen.getByRole('tab', { name: 'Reports' })
+    expect(reports()).toHaveFocus()
+
+    rerender(<Reports blocked />)
+
+    expect(reports()).toHaveAttribute('aria-disabled', 'true')
+    expect(reports()).toHaveFocus()
+    expect(reports()).toHaveAccessibleDescription(reason)
+  })
+
+  it('fills its share of a justified list', () => {
+    render(<Reports blocked />)
+
+    // jsdom has no layout: the classes that size the wrapper and make the
+    // trigger fill it are the claim.
+    const wrapper = screen
+      .getByRole('tab', { name: 'Reports' })
+      .closest('[data-slot="disabled-reason"]')
+    expect(screen.getByTestId('tabs-list')).toHaveClass(
+      'grid',
+      'auto-cols-fr',
+      '*:data-[slot=disabled-reason]:flex-1',
+    )
+    expect(wrapper).toHaveClass('*:grow', '*:min-w-0')
   })
 })

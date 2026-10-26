@@ -14,6 +14,11 @@
  *   equally between segments
  * - `readOnly` shows the choice and refuses to change it; `disabled` also
  *   greys it out; `loading` blocks it and spins on the selected segment
+ * - optionDisabledReason blocks a segment like optionDisabled and says why:
+ *   click, arrow keys and Space never select it, yet the arrows still land
+ *   on it, a tooltip shows the reason on hover and keyboard focus, and the
+ *   segment is described by it (ARC-ERR-9). It says aria-disabled only while
+ *   focused, since the radio group's arrows skip aria-disabled segments
  *
  * Implementation:
  * - Base UI RadioGroup + Radio, so roles, arrow keys and focus are the
@@ -21,6 +26,8 @@
  * - Values travel as themselves; only the internal keys are strings
  * - <SegmentedControl options={views} optionLabel="name" optionValue="id"
  *     value={view} onChange={setView} />
+ * - <SegmentedControl options={plans} optionLabel="name" optionValue="id"
+ *     optionDisabledReason={(plan) => plan.locked ? 'Upgrade to unlock' : undefined} />
  *
  * Dependencies: @base-ui/react/radio, @base-ui/react/radio-group, Loader
  */
@@ -37,6 +44,7 @@ export type SegmentedControlProps<T, I = string, O = I> = {
   loading?: boolean // blocks interaction and spins on the selection
   onChange?: (value: O) => void // fires with the selected option's value
   optionDisabled?: keyof T | ((option: T) => boolean) // per-option blocking
+  optionDisabledReason?: keyof T | ((option: T) => string | undefined) // blocks; stays focusable; says why
   optionIcon?: keyof T | ((option: T) => React.ReactNode) // icon before the label
   optionLabel: keyof T | ((option: T) => React.ReactNode) // how to read the label
   optionValue: keyof T | ((option: T) => O) // how to read the value

@@ -177,7 +177,7 @@ function Uploader({
       case 'done':
         return (
           <CheckCircle
-            className="uploader-icon-done size-4 text-emerald-500"
+            className="uploader-icon-done size-4 text-success"
             data-testid="uploader-icon-done"
           />
         )

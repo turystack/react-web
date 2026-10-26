@@ -10,7 +10,10 @@ export const styles = tv({
     branch: 'tree-branch',
     chevron:
       'tree-chevron flex size-4 shrink-0 items-center justify-center text-muted-foreground [&_svg]:size-3.5',
-    group: 'tree-group ml-4 border-border border-l pl-2',
+    // A <fieldset>: min-w-0 lifts its min-content floor; only the left rule
+    // of its border and padding is kept.
+    group:
+      'tree-group m-0 ml-4 min-w-0 border-0 border-border border-l p-0 pl-2',
     label: 'tree-label flex min-w-0 flex-1 items-center gap-2 truncate',
     root: 'tree flex w-full flex-col gap-0.5 text-sm',
     row: [
@@ -196,10 +199,10 @@ export function Tree<T, V = string>({
           </div>
 
           {hasChildren && isOpen ? (
-            // biome-ignore lint/a11y/useSemanticElements: the tree pattern puts child items in a role="group" container; <fieldset> is a form grouping, not a tree one
-            <div className={group()} role="group">
+            // The tree pattern's child container is a group; <fieldset> is one.
+            <fieldset className={group()}>
               {renderNodes(children, level + 1)}
-            </div>
+            </fieldset>
           ) : null}
         </div>
       )

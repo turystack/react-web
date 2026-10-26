@@ -125,3 +125,37 @@ describe('Avatar.Group', () => {
     )
   })
 })
+
+describe('Avatar axes', () => {
+  it('publishes its default size and variant for a theme to select', () => {
+    render(<Avatar>AS</Avatar>)
+
+    const root = screen.getByTestId('avatar-root')
+    expect(root).toHaveAttribute('data-size', 'md')
+    expect(root).toHaveAttribute('data-variant', 'circle')
+  })
+
+  it('publishes the size and variant it was given', () => {
+    render(
+      <Avatar size="lg" variant="square">
+        AS
+      </Avatar>,
+    )
+
+    const root = screen.getByTestId('avatar-root')
+    expect(root).toHaveAttribute('data-size', 'lg')
+    expect(root).toHaveAttribute('data-variant', 'square')
+  })
+
+  it('publishes them on the group too', () => {
+    render(
+      <Avatar.Group size="sm" variant="square">
+        <Avatar>A</Avatar>
+      </Avatar.Group>,
+    )
+
+    const group = screen.getByTestId('avatar-group')
+    expect(group).toHaveAttribute('data-size', 'sm')
+    expect(group).toHaveAttribute('data-variant', 'square')
+  })
+})

@@ -174,6 +174,46 @@ describe.each([
   })
 })
 
+describe.each(['orange', 'pink', 'purple', 'teal'] as BadgeVariant[])(
+  'Badge category variant %s',
+  (variant) => {
+    it('paints with its category tokens, not a raw palette', () => {
+      render(<Badge variant={variant}>Tag</Badge>)
+
+      const badge = screen.getByTestId('badge')
+      expect(badge).toHaveClass(
+        `bg-category-${variant}`,
+        `text-category-${variant}-foreground`,
+      )
+      expect(badge.className).not.toMatch(/\b(orange|pink|purple|teal)-\d/)
+    })
+  },
+)
+
+describe.each([
+  ['destructive', ['text-destructive', 'bg-destructive/5']],
+  ['success', ['text-success', 'bg-success/5', 'border-success/25']],
+  ['warning', ['text-warning', 'bg-warning/5', 'border-warning/25']],
+  ['info', ['text-info', 'bg-info/5', 'border-info/25']],
+  ['solid-destructive', ['bg-destructive', 'text-background']],
+  ['solid-success', ['bg-success', 'text-success-foreground']],
+  ['solid-info', ['bg-info', 'text-info-foreground']],
+] as [BadgeVariant, string[]][])(
+  'Badge status variant %s',
+  (variant, tokens) => {
+    it('paints with the theme status tokens, not a raw palette', () => {
+      render(<Badge variant={variant}>Paid</Badge>)
+
+      const badge = screen.getByTestId('badge')
+      expect(badge).toHaveClass(...tokens)
+      expect(badge.className).not.toMatch(
+        /\b(emerald|amber|sky|red|green|yellow)-\d/,
+      )
+      expect(badge.className).not.toMatch(/\btext-white\b/)
+    })
+  },
+)
+
 describe.each(['start', 'center', 'end'] as BadgeAlign[])(
   'Badge align %s',
   (align) => {
@@ -239,5 +279,40 @@ describe('Badge size default', () => {
 
     expect(screen.getByTestId('badge')).toHaveAttribute('data-size', 'lg')
     expect(screen.getByTestId('icon-loading')).toBeInTheDocument()
+  })
+})
+
+describe('Badge axes', () => {
+  it('publishes its default variant and size for a theme to select', () => {
+    render(<Badge>New</Badge>)
+
+    const badge = screen.getByTestId('badge')
+    expect(badge).toHaveAttribute('data-variant', 'default')
+    expect(badge).toHaveAttribute('data-size', 'md')
+  })
+
+  it('publishes the variant it was given', () => {
+    render(<Badge variant="destructive">Error</Badge>)
+
+    expect(screen.getByTestId('badge')).toHaveAttribute(
+      'data-variant',
+      'destructive',
+    )
+  })
+
+  it('publishes it on the button and on the asChild element', () => {
+    render(
+      <>
+        <Badge onClick={() => undefined} variant="info">
+          Click
+        </Badge>
+        <Badge asChild variant="success">
+          <a href="/bookings">Open bookings</a>
+        </Badge>
+      </>,
+    )
+
+    expect(screen.getByRole('button')).toHaveAttribute('data-variant', 'info')
+    expect(screen.getByRole('link')).toHaveAttribute('data-variant', 'success')
   })
 })

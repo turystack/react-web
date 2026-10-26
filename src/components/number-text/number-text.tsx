@@ -50,6 +50,9 @@ export function NumberText(props: NumberTextProps) {
   return (
     <FormatterText
       {...props}
+      published={{
+        'data-variant': props.variant ?? 'decimal',
+      }}
       testId="number-text"
       text={text}
       tone={toneOf(props)}

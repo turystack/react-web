@@ -9,10 +9,14 @@ export const styles = tv({
     align: 'start',
   },
   slots: {
-    figure: 'stat-figure flex items-baseline gap-2 font-semibold text-2xl',
+    // `min-w-0` on the figure and the root lets a narrow tile shrink them
+    // instead of pushing the delta past the edge; `flex-wrap` then sends the
+    // trend to the next line when the value leaves it no room.
+    figure:
+      'stat-figure flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 font-semibold text-2xl',
     hint: 'stat-hint text-muted-foreground text-xs',
     label: 'stat-label flex items-center gap-1.5 text-muted-foreground text-sm',
-    root: 'stat flex flex-col gap-1',
+    root: 'stat flex min-w-0 flex-col gap-1',
     trend: 'stat-trend font-medium text-sm',
   },
   variants: {
@@ -34,6 +38,7 @@ export function Stat({
   label,
   loading,
   trend,
+  trendPlacement = 'inline',
   value,
 }: StatProps) {
   const {
@@ -45,6 +50,16 @@ export function Stat({
   } = styles({
     align,
   })
+  const trendNode =
+    trend && !loading ? (
+      <span
+        className={trendSlot()}
+        data-placement={trendPlacement}
+        data-testid="stat-trend"
+      >
+        {trend}
+      </span>
+    ) : null
 
   return (
     <div className={root()} data-testid="stat">
@@ -54,12 +69,9 @@ export function Stat({
       </span>
       <span className={figure()} data-testid="stat-value">
         {loading ? <Skeleton height="sm" width="sm" /> : value}
-        {trend && !loading ? (
-          <span className={trendSlot()} data-testid="stat-trend">
-            {trend}
-          </span>
-        ) : null}
+        {trendPlacement === 'inline' ? trendNode : null}
       </span>
+      {trendPlacement === 'below' ? trendNode : null}
       {hint && !loading ? (
         <span className={hintSlot()} data-testid="stat-hint">
           {hint}

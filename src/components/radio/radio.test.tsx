@@ -115,6 +115,20 @@ describe('Radio', () => {
 })
 
 describe('Radio.Group', () => {
+  it('names the radiogroup with ariaLabel', () => {
+    render(<Radio.Group ariaLabel="Payment method" items={items} />)
+
+    expect(
+      screen.getByRole('radiogroup', { name: 'Payment method' }),
+    ).toBeInTheDocument()
+  })
+
+  it('leaves the radiogroup unnamed without ariaLabel', () => {
+    render(<Radio.Group items={items} />)
+
+    expect(screen.getByRole('radiogroup')).not.toHaveAttribute('aria-label')
+  })
+
   it('delivers the value of the picked item', async () => {
     const onChange = vi.fn()
     render(<Radio.Group items={items} onChange={onChange} />)
@@ -206,3 +220,388 @@ describe.each(['horizontal', 'vertical'] as const)(
     })
   },
 )
+
+describe('Radio.Group card', () => {
+  const intervals = [
+    {
+      label: 'Monthly',
+      rightSection: <span>R$ 49,90/mo</span>,
+      value: 'monthly',
+    },
+    {
+      badge: <span>Economize 15%</span>,
+      description: (
+        <>
+          <span>R$ 42,40/mo</span>
+          <span>Billed R$ 508,80 once a year</span>
+        </>
+      ),
+      label: <strong>Yearly</strong>,
+      rightSection: <span>R$ 508,80/yr</span>,
+      value: 'yearly',
+    },
+    { disabled: true, label: 'Lifetime', value: 'lifetime' },
+  ]
+
+  it('makes the whole card the radio, named by its label alone', () => {
+    render(<Radio.Group card items={intervals} />)
+
+    const cards = screen.getAllByTestId('radio-card')
+    expect(cards).toHaveLength(3)
+    expect(screen.getAllByRole('radio')).toEqual(cards)
+    expect(screen.getByRole('radio', { name: 'Yearly' })).toBe(cards[1])
+    expect(screen.getByRole('radio', { name: 'Monthly' })).toBe(cards[0])
+    // A div, not Base UI's default span: the card holds block content.
+    for (const card of cards) {
+      expect(card.tagName).toBe('DIV')
+    }
+  })
+
+  it('reads the badge, description and right section as the description', () => {
+    render(<Radio.Group card items={intervals} />)
+
+    expect(
+      screen.getByRole('radio', { name: 'Yearly' }),
+    ).toHaveAccessibleDescription(
+      'Economize 15% R$ 42,40/moBilled R$ 508,80 once a year R$ 508,80/yr',
+    )
+    expect(
+      screen.getByRole('radio', { name: 'Monthly' }),
+    ).toHaveAccessibleDescription('R$ 49,90/mo')
+    expect(screen.getByRole('radio', { name: 'Lifetime' })).not.toHaveAttribute(
+      'aria-describedby',
+    )
+  })
+
+  it('renders the rich content it was given', () => {
+    render(<Radio.Group card items={intervals} />)
+
+    expect(screen.getByText('Economize 15%')).toBeInTheDocument()
+    expect(screen.getByText('R$ 508,80/yr')).toBeInTheDocument()
+    expect(screen.getByText('Yearly').tagName).toBe('STRONG')
+  })
+
+  it('picks the card from a click anywhere on it', async () => {
+    const onChange = vi.fn()
+    render(<Radio.Group card items={intervals} onChange={onChange} />)
+
+    await userEvent.click(screen.getByText('R$ 508,80/yr'))
+
+    expect(onChange).toHaveBeenCalledWith('yearly')
+    expect(screen.getByRole('radio', { name: 'Yearly' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(screen.getByRole('radio', { name: 'Monthly' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+  })
+
+  it('keeps one tab stop and moves the selection with the arrow keys', async () => {
+    const onChange = vi.fn()
+    render(
+      <>
+        <Radio.Group
+          card
+          defaultValue="monthly"
+          items={intervals.slice(0, 2)}
+          onChange={onChange}
+        />
+        <button type="button">after</button>
+      </>,
+    )
+    const monthly = screen.getByRole('radio', { name: 'Monthly' })
+    const yearly = screen.getByRole('radio', { name: 'Yearly' })
+
+    await userEvent.tab()
+    expect(monthly).toHaveFocus()
+
+    await userEvent.keyboard('{ArrowDown}')
+    expect(yearly).toHaveFocus()
+    expect(yearly).toHaveAttribute('aria-checked', 'true')
+    expect(onChange).toHaveBeenLastCalledWith('yearly')
+
+    await userEvent.keyboard('{ArrowUp}')
+    expect(monthly).toHaveFocus()
+    expect(onChange).toHaveBeenLastCalledWith('monthly')
+
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'after' })).toHaveFocus()
+  })
+
+  it('moves along a horizontal row with the side arrows', async () => {
+    const onChange = vi.fn()
+    render(
+      <Radio.Group
+        card
+        defaultValue="monthly"
+        items={intervals.slice(0, 2)}
+        onChange={onChange}
+        variant="horizontal"
+      />,
+    )
+
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowRight}')
+
+    expect(screen.getByRole('radio', { name: 'Yearly' })).toHaveFocus()
+    expect(onChange).toHaveBeenLastCalledWith('yearly')
+  })
+
+  it('skips and blocks the disabled card', async () => {
+    const onChange = vi.fn()
+    render(
+      <Radio.Group
+        card
+        defaultValue="yearly"
+        items={intervals}
+        onChange={onChange}
+      />,
+    )
+    const lifetime = screen.getByRole('radio', { name: 'Lifetime' })
+    expect(lifetime).toHaveAttribute('aria-disabled', 'true')
+
+    await userEvent.click(lifetime)
+    expect(onChange).not.toHaveBeenCalled()
+    expect(lifetime).toHaveAttribute('aria-checked', 'false')
+
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowDown}')
+    expect(lifetime).not.toHaveFocus()
+    expect(onChange).not.toHaveBeenCalledWith('lifetime')
+  })
+
+  it('draws its focus ring and checked state on the card', async () => {
+    render(<Radio.Group card defaultValue="yearly" items={intervals} />)
+
+    const yearly = screen.getByRole('radio', { name: 'Yearly' })
+    expect(yearly).toHaveClass(
+      'focus-visible:ring-3',
+      'data-checked:border-primary',
+    )
+    expect(yearly).toHaveAttribute('data-checked')
+    expect(screen.getByRole('radio', { name: 'Monthly' })).not.toHaveAttribute(
+      'data-checked',
+    )
+  })
+
+  it('keeps the selection it was given and still asks for the change', async () => {
+    const onChange = vi.fn()
+    render(
+      <Radio.Group
+        card
+        items={intervals}
+        onChange={onChange}
+        value="monthly"
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Yearly' }))
+
+    expect(onChange).toHaveBeenCalledWith('yearly')
+    expect(screen.getByRole('radio', { name: 'Monthly' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+  })
+
+  it('shares a horizontal row evenly and fills a vertical column', () => {
+    const { unmount } = render(
+      <Radio.Group card items={intervals} variant="horizontal" />,
+    )
+    for (const card of screen.getAllByTestId('radio-card')) {
+      expect(card).toHaveClass('flex-1', 'basis-0', 'min-w-40')
+    }
+    unmount()
+
+    render(<Radio.Group card items={intervals} />)
+    for (const card of screen.getAllByTestId('radio-card')) {
+      expect(card).toHaveClass('w-full')
+      expect(card).not.toHaveClass('flex-1')
+    }
+  })
+
+  it('leaves badge and right section out of the plain group', () => {
+    render(<Radio.Group items={intervals} />)
+
+    expect(screen.queryByText('Economize 15%')).not.toBeInTheDocument()
+    expect(screen.queryByText('R$ 508,80/yr')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('radio-card')).not.toBeInTheDocument()
+  })
+})
+
+describe('Radio.Group axes', () => {
+  it('publishes its default variant for a theme to select', () => {
+    render(<Radio.Group items={items} />)
+
+    expect(screen.getByRole('radiogroup')).toHaveAttribute(
+      'data-variant',
+      'vertical',
+    )
+  })
+
+  it('publishes the variant it was given', () => {
+    render(<Radio.Group items={items} variant="horizontal" />)
+
+    expect(screen.getByRole('radiogroup')).toHaveAttribute(
+      'data-variant',
+      'horizontal',
+    )
+  })
+})
+
+describe('Radio disabledReason', () => {
+  const reason = 'Pix is offline'
+  const options = [
+    { label: 'Card', value: 'card' },
+    { disabledReason: reason, label: 'Pix', value: 'pix' },
+    { label: 'Boleto', value: 'boleto' },
+  ]
+
+  it('renders no wrapper and no description without a reason', () => {
+    render(<Radio.Group items={items} />)
+
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).not.toHaveAttribute('aria-describedby')
+    }
+    expect(
+      document.querySelector('[data-slot="disabled-reason"]'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('a standalone radio is blocked, reachable and never checks', async () => {
+    const onChange = vi.fn()
+
+    render(
+      <>
+        <button type="button">before</button>
+        <Radio disabledReason={reason} label="Pix" onChange={onChange} />
+      </>,
+    )
+    const radio = screen.getByRole('radio', { name: 'Pix' })
+
+    expect(radio).toHaveAttribute('aria-disabled', 'true')
+    expect(radio).not.toHaveAttribute('data-disabled')
+    expect(radio).toHaveAccessibleDescription(reason)
+
+    await userEvent.tab()
+    await userEvent.tab()
+    expect(radio).toHaveFocus()
+    expect(
+      await screen.findByTestId('disabled-reason-popup'),
+    ).toHaveTextContent(reason)
+
+    await userEvent.keyboard(' ')
+    await userEvent.click(radio, { pointerEventsCheck: 0 })
+    await userEvent.click(screen.getByText('Pix'), { pointerEventsCheck: 0 })
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect(radio).not.toBeChecked()
+  })
+
+  it('in a group, the arrows land on it but never select it', async () => {
+    const onChange = vi.fn()
+
+    render(
+      <Radio.Group defaultValue="card" items={options} onChange={onChange} />,
+    )
+    const pix = screen.getByRole('radio', { name: 'Pix' })
+
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowDown}')
+
+    expect(pix).toHaveFocus()
+    expect(pix).toHaveAttribute('aria-disabled', 'true')
+    expect(pix).toHaveAccessibleDescription(reason)
+    expect(
+      await screen.findByTestId('disabled-reason-popup'),
+    ).toHaveTextContent(reason)
+
+    await userEvent.keyboard(' ')
+    await userEvent.click(pix, { pointerEventsCheck: 0 })
+    await userEvent.click(screen.getByText('Pix'), { pointerEventsCheck: 0 })
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect(pix).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Card' })).toBeChecked()
+
+    await userEvent.keyboard('{ArrowDown}')
+    expect(screen.getByRole('radio', { name: 'Boleto' })).toHaveFocus()
+    expect(onChange).toHaveBeenCalledWith('boleto')
+  })
+
+  it('a blocked card is reached by the arrows, described first by the reason', async () => {
+    const onChange = vi.fn()
+
+    render(
+      <Radio.Group
+        card
+        defaultValue="card"
+        items={[
+          { label: 'Card', value: 'card' },
+          {
+            description: 'Instant',
+            disabledReason: reason,
+            label: 'Pix',
+            value: 'pix',
+          },
+        ]}
+        onChange={onChange}
+      />,
+    )
+    const pix = screen.getByRole('radio', { name: 'Pix' })
+
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowDown}')
+
+    expect(pix).toHaveFocus()
+    expect(pix).toHaveAccessibleDescription(`${reason} Instant`)
+
+    await userEvent.keyboard(' ')
+    await userEvent.click(pix, { pointerEventsCheck: 0 })
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect(pix).not.toBeChecked()
+  })
+})
+
+describe('Radio.Group card disabledReason, edge cases', () => {
+  const reason = 'Your plan has no yearly billing'
+  const cards = (blocked: boolean) => [
+    { label: 'Monthly', value: 'monthly' },
+    {
+      description: 'Billed once a year',
+      disabledReason: blocked ? reason : undefined,
+      label: 'Yearly',
+      value: 'yearly',
+    },
+  ]
+
+  it('points at its own details with no stray space when nothing blocks it', () => {
+    render(<Radio.Group card items={cards(false)} />)
+
+    expect(
+      screen
+        .getByRole('radio', { name: 'Yearly' })
+        .getAttribute('aria-describedby'),
+    ).toMatch(/^\S+$/)
+  })
+
+  it('keeps focus when a reason arrives on the focused card', async () => {
+    const { rerender } = render(<Radio.Group card items={cards(false)} />)
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowDown}')
+    const yearly = () => screen.getByRole('radio', { name: 'Yearly' })
+    expect(yearly()).toHaveFocus()
+
+    rerender(<Radio.Group card items={cards(true)} />)
+
+    expect(yearly()).toHaveFocus()
+    expect(yearly()).toHaveAccessibleDescription(`${reason} Billed once a year`)
+
+    rerender(<Radio.Group card items={cards(false)} />)
+
+    expect(yearly()).toHaveFocus()
+  })
+})

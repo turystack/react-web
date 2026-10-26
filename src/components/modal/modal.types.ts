@@ -5,7 +5,8 @@
  * Compound component with Header (Title + Description), Body, and Footer.
  *
  * Behavior:
- * - Overlay: fixed black/80 background covering the viewport
+ * - Overlay: the shared `bg-overlay` scrim, blurred by `--overlay-blur`,
+ *   covering the viewport (50% black in light, 70% in dark)
  * - Content: centered (top-50%, left-50%, translate -50%) with max-height 90vh
  * - Header: optional close button (X icon) and bordered bottom variant
  * - Body: flex-grow with overflow-auto for scrollable content
@@ -14,7 +15,7 @@
  * - Focus is trapped within the modal while open
  *
  * Implementation:
- * - Use Radix UI Dialog primitives (Portal, Overlay, Content, Close, Title, Description)
+ * - Base UI Dialog primitives (Portal, Backdrop, Popup, Close, Title, Description)
  * - Animation: zoom from 95%, fade in/out ~200ms
  * - Modal.Header supports nested dot notation: Modal.Header.Title, Modal.Header.Description
  * - <Modal open={show} onChange={setShow}>
@@ -26,7 +27,7 @@
  *     <Modal.Footer bordered><Button>Save</Button></Modal.Footer>
  *   </Modal>
  *
- * Dependencies: @radix-ui/react-dialog, @turystack/react-icons (X icon)
+ * Dependencies: @base-ui/react/dialog, Button, @turystack/react-icons (X icon)
  */
 
 export type ModalProps = {

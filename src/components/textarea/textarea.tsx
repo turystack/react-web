@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { tv } from 'tailwind-variants'
-
-import { cn } from '@/support/utils'
+import { useFormFieldControl } from '@/components/form/form.context'
+import { axes } from '@/support/utils'
 
 import type { TextareaProps } from './textarea.types'
 
@@ -49,12 +49,20 @@ function Textarea({
   defaultValue,
   leftSection,
   rightSection,
-  rootClassName,
-  className,
+  ariaLabel,
   onChange,
   maxLength,
+  id: explicitId,
+  'aria-describedby': explicitDescribedBy,
+  'aria-invalid': explicitInvalid,
   ...props
 }: TextareaProps) {
+  // Form.Field's id, description/error ids and error state, unless given.
+  const control = useFormFieldControl({
+    describedBy: explicitDescribedBy,
+    id: explicitId,
+    invalid: explicitInvalid,
+  })
   const hasCounter = maxLength != null
 
   const [typedLength, setTypedLength] = useState(
@@ -109,8 +117,9 @@ function Textarea({
 
   return (
     <div
-      className={root({
-        className: rootClassName,
+      className={root()}
+      {...axes(textarea, {
+        size,
       })}
       data-testid="textarea-root"
     >
@@ -128,14 +137,20 @@ function Textarea({
         </span>
       )}
       <textarea
+        aria-describedby={control.describedBy}
+        aria-invalid={control.invalid}
+        aria-label={ariaLabel}
         data-slot="textarea"
         data-testid="textarea-field"
+        id={control.id}
         maxLength={maxLength}
         onChange={handleChange}
-        style={fieldStyle}
         {...controlledProps}
         {...props}
-        className={cn(field(), className)}
+        // After the spread: the field's look is its own, whatever arrives at
+        // runtime (PROP-1).
+        className={field()}
+        style={fieldStyle}
       />
       {hasRight && (
         <span

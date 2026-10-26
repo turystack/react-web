@@ -15,6 +15,7 @@ import {
 import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
 import { useLabels } from '@/components/labels-provider'
+import { DisabledReason } from '@/components/tooltip/tooltip.composed'
 import { Check, ChevronLeft, ChevronRight, Loader2 } from '@/internal/icons'
 import { cn } from '@/support/utils'
 
@@ -94,6 +95,27 @@ const stepper = tv({
       orientation: 'vertical',
       variant: 'dotted',
     },
+    {
+      class: {
+        trigger: 'h-8',
+      },
+      size: 'sm',
+      variant: 'path',
+    },
+    {
+      class: {
+        trigger: 'h-10',
+      },
+      size: 'md',
+      variant: 'path',
+    },
+    {
+      class: {
+        trigger: 'h-12',
+      },
+      size: 'lg',
+      variant: 'path',
+    },
   ],
   defaultVariants: {
     connector: 'line',
@@ -116,6 +138,19 @@ const stepper = tv({
     list: 'stepper-list flex w-full items-center justify-between gap-2',
     panels: 'stepper-panels flex min-h-0 flex-1 flex-col',
     root: 'stepper-root flex min-h-0 w-full',
+    // The chevron of a path stage. It paints on its own layer behind the
+    // label so the trigger stays rectangular: a clip-path on the trigger
+    // itself would clip its focus ring away. A middle stage is notched on the
+    // left and pointed on the right; the first has a flat left edge, the last
+    // a flat right edge, and a lone stage is a plain box.
+    shape: [
+      'stepper-shape absolute inset-0 -z-10 bg-muted transition-colors',
+      '[clip-path:polygon(0_0,calc(100%_-_0.75rem)_0,100%_50%,calc(100%_-_0.75rem)_100%,0_100%,0.75rem_50%)]',
+      'group-first/step:[clip-path:polygon(0_0,calc(100%_-_0.75rem)_0,100%_50%,calc(100%_-_0.75rem)_100%,0_100%)]',
+      'group-last/step:[clip-path:polygon(0_0,100%_0,100%_100%,0_100%,0.75rem_50%)]',
+      'group-only/step:[clip-path:none]',
+      'data-[state=stepCompleted]:bg-primary/15 data-[state=stepProgress]:bg-primary',
+    ],
     step: 'stepper-step flex min-w-0 items-center gap-2',
     trigger:
       'stepper-trigger inline-flex cursor-pointer items-center gap-2 rounded-md p-1 outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
@@ -184,7 +219,7 @@ const stepper = tv({
         label: 'text-sm',
       },
       sm: {
-        description: 'text-[0.7rem]',
+        description: 'text-(length:--text-caption)',
         indicator: 'size-6 text-xs [&>svg]:size-3.5',
         label: 'text-xs',
       },
@@ -195,6 +230,17 @@ const stepper = tv({
       },
       icon: {},
       numbered: {},
+      path: {
+        description: 'sr-only',
+        indicator:
+          'size-auto bg-transparent text-current data-[state=stepCompleted]:bg-transparent data-[state=stepProgress]:bg-transparent data-[state=stepCompleted]:text-current data-[state=stepProgress]:text-current',
+        label: 'block truncate text-current',
+        list: 'flex-nowrap gap-0',
+        step: 'group/step -ms-2 flex-1 first:ms-0',
+        trigger:
+          'relative isolate w-full min-w-0 justify-center gap-1.5 rounded-none px-5 text-muted-foreground focus-visible:z-10 disabled:cursor-default disabled:opacity-100 aria-disabled:cursor-default aria-disabled:opacity-100 data-[state=stepCompleted]:text-foreground data-[state=stepProgress]:text-primary-foreground',
+        triggerBody: 'min-w-0 items-center text-center',
+      },
     },
     wrap: {
       true: {
@@ -260,6 +306,12 @@ function isStepperCompleted(
   return isValidElement(child) && child.type === StepperCompleted
 }
 
+// A panel only earns its place when it has something to show: Children.toArray
+// drops null, undefined and booleans, and an empty string paints nothing.
+function hasContent(node: ReactNode): boolean {
+  return Children.toArray(node).some((child) => child !== '')
+}
+
 function resolveStepState(stepIndex: number, active: number): StepState {
   if (stepIndex === active) {
     return 'stepProgress'
@@ -315,14 +367,27 @@ function StepperRoot({
   wrap = true,
 }: React.PropsWithChildren<StepperProps>) {
   const labels = useLabels()
+  // A path is one row of chevrons: they are their own separators and cannot
+  // stack or wrap, so the layout props it cannot honour are set aside here
+  // rather than half-applied.
+  const isPath = variant === 'path'
+  const layout = isPath
+    ? {
+        connector: 'none' as const,
+        orientation: 'horizontal' as const,
+        wrap: false,
+      }
+    : {
+        connector,
+        orientation,
+        wrap,
+      }
   const styles = stepper({
-    connector,
+    ...layout,
     iconPosition,
-    orientation,
     radius,
     size,
     variant,
-    wrap,
   })
 
   const childArray = useMemo(() => Children.toArray(children), [children])
@@ -422,8 +487,21 @@ function StepperRoot({
   )
 
   const showCompleted = active >= totalSteps && completedElement
+  // With nothing to show the panel area is not rendered at all: an empty
+  // section still costs its top margin and the root's gap, which leaves a
+  // path used as a status bar with dead space under it. Kept-mounted panels
+  // stay in the DOM while any step has content, with the area hidden while
+  // the active step has none.
+  const activeHasContent = showCompleted
+    ? hasContent(completedElement.props.children)
+    : hasContent(stepElements[active]?.props.children)
+  const anyStepHasContent = stepElements.some((stepEl) =>
+    hasContent(stepEl.props.children),
+  )
+  const renderPanels =
+    activeHasContent || (keepMounted && !showCompleted && anyStepHasContent)
   const indicatorIconStyle =
-    iconSize !== undefined
+    iconSize !== undefined && !isPath
       ? {
           height: iconSize,
           width: iconSize,
@@ -446,9 +524,11 @@ function StepperRoot({
       <div
         aria-describedby={liveMessageId}
         className={cn(styles.root())}
-        data-orientation={orientation}
+        data-orientation={layout.orientation}
+        data-size={size}
         data-slot="stepper-root"
         data-testid="stepper-root"
+        data-variant={variant}
       >
         <ol
           aria-label="Stepper"
@@ -466,13 +546,33 @@ function StepperRoot({
               stepProps.allowStepSelect ??
               (allowNextStepsSelect || index < active)
             const isCurrent = index === active
-            const isBlocked = !allowClick && !isCurrent
+            /**
+             * Why the step cannot be opened. The consumer's reason first; else,
+             * for a step ahead that only the linear default holds back, the
+             * stepper's own — it knows the current step is not done. A step
+             * closed by an explicit `allowStepClick={false}` gets no guess.
+             */
+            const reason = isCurrent
+              ? undefined
+              : (stepProps.disabledReason ??
+                (index > active &&
+                !allowNextStepsSelect &&
+                stepProps.allowStepClick === undefined &&
+                stepProps.allowStepSelect === undefined
+                  ? labels.stepper.blocked
+                  : undefined))
+            const isBlocked = (!allowClick || Boolean(reason)) && !isCurrent
             const fragmentProps: StepFragmentProps = {
               state,
               step: index,
             }
+            // A path stage is its label; only a finished or a loading stage
+            // earns a mark beside it.
             const indicatorContent =
-              variant === 'dotted'
+              variant === 'dotted' ||
+              (isPath &&
+                state !== 'stepCompleted' &&
+                !(state === 'stepProgress' && stepProps.loading))
                 ? null
                 : state === 'stepCompleted'
                   ? renderFragment(
@@ -493,7 +593,7 @@ function StepperRoot({
                       )
 
             const handleClick = () => {
-              if (!allowClick || isCurrent) {
+              if (isBlocked || isCurrent) {
                 return
               }
               goTo(index)
@@ -507,55 +607,79 @@ function StepperRoot({
                 data-state={state}
                 key={stepKey}
               >
-                <ButtonPrimitive
-                  aria-disabled={isBlocked}
-                  className={styles.trigger()}
-                  data-slot="stepper-trigger"
-                  data-state={state}
-                  disabled={isBlocked}
-                  id={`${baseId}-label-${index}`}
-                  onClick={handleClick}
-                  type="button"
+                <DisabledReason
+                  display={isPath ? 'block' : 'inline'}
+                  reason={reason}
                 >
-                  <span
-                    className={styles.indicator()}
-                    data-slot="stepper-indicator"
-                    data-state={state}
-                    style={{
-                      ...indicatorIconStyle,
-                    }}
-                  >
-                    {indicatorContent}
-                  </span>
-                  {(stepProps.label || stepProps.description) && (
-                    <span
-                      className={styles.triggerBody()}
-                      data-slot="stepper-trigger-body"
+                  {(a11y) => (
+                    <ButtonPrimitive
+                      aria-disabled={isBlocked}
+                      className={styles.trigger()}
+                      data-slot="stepper-trigger"
+                      data-state={state}
+                      disabled={isBlocked}
+                      focusableWhenDisabled={Boolean(reason)}
+                      id={`${baseId}-label-${index}`}
+                      onClick={handleClick}
+                      title={
+                        isPath && typeof stepProps.label === 'string'
+                          ? stepProps.label
+                          : undefined
+                      }
+                      type="button"
+                      {...a11y}
                     >
-                      {stepProps.label && (
+                      {isPath && (
                         <span
-                          className={styles.label()}
-                          data-slot="stepper-label"
+                          aria-hidden
+                          className={styles.shape()}
+                          data-slot="stepper-shape"
+                          data-state={state}
+                        />
+                      )}
+                      {(!isPath || indicatorContent !== null) && (
+                        <span
+                          className={styles.indicator()}
+                          data-slot="stepper-indicator"
+                          data-state={state}
+                          style={{
+                            ...indicatorIconStyle,
+                          }}
                         >
-                          {stepProps.label}
+                          {indicatorContent}
                         </span>
                       )}
-                      {stepProps.description && (
+                      {(stepProps.label || stepProps.description) && (
                         <span
-                          className={styles.description()}
-                          data-slot="stepper-description"
+                          className={styles.triggerBody()}
+                          data-slot="stepper-trigger-body"
                         >
-                          {stepProps.description}
+                          {stepProps.label && (
+                            <span
+                              className={styles.label()}
+                              data-slot="stepper-label"
+                            >
+                              {stepProps.label}
+                            </span>
+                          )}
+                          {stepProps.description && (
+                            <span
+                              className={styles.description()}
+                              data-slot="stepper-description"
+                            >
+                              {stepProps.description}
+                            </span>
+                          )}
                         </span>
                       )}
-                    </span>
+                    </ButtonPrimitive>
                   )}
-                </ButtonPrimitive>
-                {connector !== 'none' && index < totalSteps - 1 && (
+                </DisabledReason>
+                {layout.connector !== 'none' && index < totalSteps - 1 && (
                   <span
                     aria-hidden
                     className={styles.connector()}
-                    data-connector={connector}
+                    data-connector={layout.connector}
                     data-slot="stepper-connector"
                     data-state={
                       index < active ? 'stepCompleted' : 'stepInactive'
@@ -568,66 +692,68 @@ function StepperRoot({
           })}
         </ol>
 
-        <div
-          className={styles.panels()}
-          data-slot="stepper-panels"
-          ref={panelsRef}
-        >
-          {showCompleted ? (
-            <section
-              aria-label={labels.stepper.completed}
-              className={cn(styles.completed())}
-              data-slot="stepper-completed"
-              id={`${baseId}-completed`}
-            >
-              {completedElement?.props.children}
-            </section>
-          ) : keepMounted ? (
-            stepElements.map((stepEl, index) => {
-              const isActiveStep = index === active
-              return (
+        {renderPanels && (
+          <div
+            className={styles.panels()}
+            data-slot="stepper-panels"
+            hidden={!activeHasContent}
+            ref={panelsRef}
+          >
+            {showCompleted ? (
+              <section
+                aria-label={labels.stepper.completed}
+                className={cn(styles.completed())}
+                data-slot="stepper-completed"
+                id={`${baseId}-completed`}
+              >
+                {completedElement?.props.children}
+              </section>
+            ) : keepMounted ? (
+              stepElements.map((stepEl, index) => {
+                const isActiveStep = index === active
+                return (
+                  <section
+                    aria-labelledby={`${baseId}-label-${index}`}
+                    className={cn(
+                      styles.content(),
+                      isActiveStep
+                        ? 'fade-in-0 animate-in'
+                        : 'pointer-events-none',
+                    )}
+                    data-direction={directionRef.current}
+                    data-slot="stepper-content"
+                    data-state={isActiveStep ? 'active' : 'inactive'}
+                    hidden={!isActiveStep}
+                    inert={!isActiveStep}
+                    key={`${baseId}-panel-${index}`}
+                  >
+                    {stepEl.props.children}
+                  </section>
+                )
+              })
+            ) : (
+              stepElements[active] && (
                 <section
-                  aria-labelledby={`${baseId}-label-${index}`}
+                  aria-labelledby={`${baseId}-label-${active}`}
                   className={cn(
                     styles.content(),
-                    isActiveStep
-                      ? 'fade-in-0 animate-in'
-                      : 'pointer-events-none',
+                    'fade-in-0 animate-in',
+                    directionRef.current === 'forward' &&
+                      'motion-safe:slide-in-from-right-2',
+                    directionRef.current === 'back' &&
+                      'motion-safe:slide-in-from-left-2',
                   )}
                   data-direction={directionRef.current}
                   data-slot="stepper-content"
-                  data-state={isActiveStep ? 'active' : 'inactive'}
-                  hidden={!isActiveStep}
-                  // biome-ignore lint/suspicious/noExplicitAny: inert is a valid HTML attribute typed loosely
-                  inert={!isActiveStep ? ('' as any) : undefined}
-                  key={`${baseId}-panel-${index}`}
+                  data-state="active"
+                  key={`${baseId}-panel-${active}`}
                 >
-                  {stepEl.props.children}
+                  {stepElements[active]?.props.children}
                 </section>
               )
-            })
-          ) : (
-            stepElements[active] && (
-              <section
-                aria-labelledby={`${baseId}-label-${active}`}
-                className={cn(
-                  styles.content(),
-                  'fade-in-0 animate-in',
-                  directionRef.current === 'forward' &&
-                    'motion-safe:slide-in-from-right-2',
-                  directionRef.current === 'back' &&
-                    'motion-safe:slide-in-from-left-2',
-                )}
-                data-direction={directionRef.current}
-                data-slot="stepper-content"
-                data-state="active"
-                key={`${baseId}-panel-${active}`}
-              >
-                {stepElements[active]?.props.children}
-              </section>
-            )
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {restElements.length > 0 && (
           <div

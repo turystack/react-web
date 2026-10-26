@@ -4,7 +4,9 @@ import {
   type ColorScheme,
   useColorScheme,
 } from '@/components/color-scheme-provider'
+import { useLabels } from '@/components/labels-provider'
 import { Monitor, Moon, Sun } from '@/internal/icons'
+import { axes } from '@/support/utils'
 
 import type { ColorSchemeSwitcherProps } from './color-scheme-switcher.types'
 
@@ -15,8 +17,8 @@ const styles = tv({
   slots: {
     icon: 'color-scheme-switcher-icon pointer-events-none shrink-0',
     option:
-      'color-scheme-switcher-option relative inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent text-foreground/60 outline-none transition-all hover:text-foreground focus-visible:border-ring focus-visible:outline-1 focus-visible:outline-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:text-muted-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground dark:hover:text-foreground',
-    root: 'color-scheme-switcher-root inline-flex w-fit items-center justify-center rounded-lg bg-muted p-[3px] text-muted-foreground',
+      'color-scheme-switcher-option relative inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent text-foreground/60 outline-none transition-all hover:text-foreground focus-visible:border-ring focus-visible:outline-1 focus-visible:outline-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:text-muted-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground dark:hover:text-foreground',
+    root: 'color-scheme-switcher-root inline-flex w-fit items-center justify-center rounded-lg bg-muted p-0.75 text-muted-foreground',
   },
   variants: {
     size: {
@@ -41,45 +43,45 @@ const styles = tv({
 
 const OPTIONS: {
   icon: typeof Sun
-  label: string
   value: ColorScheme
 }[] = [
   {
     icon: Sun,
-    label: 'Light',
     value: 'light',
   },
   {
     icon: Moon,
-    label: 'Dark',
     value: 'dark',
   },
   {
     icon: Monitor,
-    label: 'System',
     value: 'system',
   },
 ]
 
 function ColorSchemeSwitcher({ size }: ColorSchemeSwitcherProps) {
   const { changeColorScheme, colorScheme } = useColorScheme()
+  const labels = useLabels()
   const s = styles({
     size,
   })
 
   return (
     <div
-      aria-label="Color scheme"
+      aria-label={labels.colorSchemeSwitcher.label}
       className={s.root()}
       data-testid="color-scheme-switcher"
       role="radiogroup"
+      {...axes(styles, {
+        size,
+      })}
     >
-      {OPTIONS.map(({ icon: Icon, label, value }) => {
+      {OPTIONS.map(({ icon: Icon, value }) => {
         const active = colorScheme === value
         return (
           <ButtonPrimitive
             aria-checked={active}
-            aria-label={label}
+            aria-label={labels.colorSchemeSwitcher[value]}
             className={s.option()}
             data-active={active ? '' : undefined}
             data-testid={`color-scheme-switcher-${value}`}

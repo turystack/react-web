@@ -442,3 +442,250 @@ describe('DropdownMenu inside a provider that names a portal container', () => {
     expect(container).not.toContainElement(screen.getByRole('menu'))
   })
 })
+
+describe('DropdownMenu.Item axes', () => {
+  it('publishes its default variant for a theme to select', () => {
+    open(<DropdownMenu.Item>Edit</DropdownMenu.Item>)
+
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveAttribute(
+      'data-variant',
+      'default',
+    )
+  })
+
+  it('publishes the variant it was given', () => {
+    open(<DropdownMenu.Item variant="destructive">Delete</DropdownMenu.Item>)
+
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveAttribute(
+      'data-variant',
+      'destructive',
+    )
+  })
+
+  it('publishes it on the element it was given under asChild', () => {
+    open(
+      <DropdownMenu.Item asChild variant="destructive">
+        <a href="/delete">Delete</a>
+      </DropdownMenu.Item>,
+    )
+
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveAttribute(
+      'data-variant',
+      'destructive',
+    )
+  })
+})
+
+describe('DropdownMenu disabledReason', () => {
+  const reason = 'Only owners can share'
+
+  /** Opens from the keyboard, so focus moves into the menu as a user's would. */
+  async function openByKeyboard(children: React.ReactNode) {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger>Actions</DropdownMenu.Trigger>
+        <DropdownMenu.Content>{children}</DropdownMenu.Content>
+      </DropdownMenu>,
+    )
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowDown}')
+    await screen.findByRole('menu')
+  }
+
+  it('renders no wrapper and no description without a reason', () => {
+    open(
+      <>
+        <DropdownMenu.Item>Share</DropdownMenu.Item>
+        <DropdownMenu.CheckboxItem>Pinned</DropdownMenu.CheckboxItem>
+      </>,
+    )
+
+    expect(screen.getByRole('menuitem')).not.toHaveAttribute('aria-describedby')
+    expect(screen.getByRole('menuitemcheckbox')).not.toHaveAttribute(
+      'aria-describedby',
+    )
+    expect(
+      document.querySelector('[data-slot="disabled-reason"]'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('blocks an Item that arrow keys still reach, and keeps the menu open', async () => {
+    const onClick = vi.fn()
+    await openByKeyboard(
+      <>
+        <DropdownMenu.Item>Edit</DropdownMenu.Item>
+        <DropdownMenu.Item disabledReason={reason} onClick={onClick}>
+          Share
+        </DropdownMenu.Item>
+      </>,
+    )
+    const item = screen.getByRole('menuitem', { name: 'Share' })
+
+    expect(item).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.keyboard('{ArrowDown}')
+    expect(item).toHaveFocus()
+
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard(' ')
+    await userEvent.click(item, { pointerEventsCheck: 0 })
+
+    expect(onClick).not.toHaveBeenCalled()
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+  })
+
+  it('blocks a CheckboxItem from toggling', async () => {
+    const onCheckedChange = vi.fn()
+    await openByKeyboard(
+      <>
+        <DropdownMenu.Item>Edit</DropdownMenu.Item>
+        <DropdownMenu.CheckboxItem
+          checked={false}
+          disabledReason={reason}
+          onCheckedChange={onCheckedChange}
+        >
+          Pinned
+        </DropdownMenu.CheckboxItem>
+      </>,
+    )
+    const item = screen.getByRole('menuitemcheckbox', { name: 'Pinned' })
+
+    await userEvent.keyboard('{ArrowDown}')
+    expect(item).toHaveFocus()
+    expect(item).toHaveAttribute('aria-disabled', 'true')
+
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard(' ')
+    await userEvent.click(item, { pointerEventsCheck: 0 })
+
+    expect(onCheckedChange).not.toHaveBeenCalled()
+    expect(item).not.toBeChecked()
+  })
+
+  it('blocks a RadioItem from being selected', async () => {
+    const onValueChange = vi.fn()
+    await openByKeyboard(
+      <DropdownMenu.RadioGroup onValueChange={onValueChange} value="light">
+        <DropdownMenu.RadioItem value="light">Light</DropdownMenu.RadioItem>
+        <DropdownMenu.RadioItem disabledReason={reason} value="dark">
+          Dark
+        </DropdownMenu.RadioItem>
+      </DropdownMenu.RadioGroup>,
+    )
+    const item = screen.getByRole('menuitemradio', { name: 'Dark' })
+
+    await userEvent.keyboard('{ArrowDown}')
+    expect(item).toHaveFocus()
+    expect(item).toHaveAttribute('aria-disabled', 'true')
+
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard(' ')
+    await userEvent.click(item, { pointerEventsCheck: 0 })
+
+    expect(onValueChange).not.toHaveBeenCalled()
+    expect(item).not.toBeChecked()
+  })
+
+  it('describes each kind of item by the reason', () => {
+    open(
+      <>
+        <DropdownMenu.Item disabledReason={reason}>Share</DropdownMenu.Item>
+        <DropdownMenu.CheckboxItem disabledReason={reason}>
+          Pinned
+        </DropdownMenu.CheckboxItem>
+        <DropdownMenu.RadioGroup value="light">
+          <DropdownMenu.RadioItem disabledReason={reason} value="dark">
+            Dark
+          </DropdownMenu.RadioItem>
+        </DropdownMenu.RadioGroup>
+      </>,
+    )
+
+    expect(screen.getByRole('menuitem')).toHaveAccessibleDescription(reason)
+    expect(screen.getByRole('menuitemcheckbox')).toHaveAccessibleDescription(
+      reason,
+    )
+    expect(screen.getByRole('menuitemradio')).toHaveAccessibleDescription(
+      reason,
+    )
+  })
+
+  it('shows the reason when arrow keys reach the item', async () => {
+    await openByKeyboard(
+      <>
+        <DropdownMenu.Item>Edit</DropdownMenu.Item>
+        <DropdownMenu.Item disabledReason={reason}>Share</DropdownMenu.Item>
+      </>,
+    )
+
+    expect(
+      screen.queryByTestId('disabled-reason-popup'),
+    ).not.toBeInTheDocument()
+    await userEvent.keyboard('{ArrowDown}')
+
+    expect(
+      await screen.findByTestId('disabled-reason-popup'),
+    ).toHaveTextContent(reason)
+  })
+})
+
+describe('DropdownMenu disabledReason, edge cases', () => {
+  const reason = 'Only owners can share'
+
+  function Menu({ blocked }: { blocked: boolean }) {
+    return (
+      <DropdownMenu>
+        <DropdownMenu.Trigger>Actions</DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <DropdownMenu.Item disabledReason={blocked ? reason : undefined}>
+            Share
+          </DropdownMenu.Item>
+          <DropdownMenu.Item>Edit</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    )
+  }
+
+  it('keeps focus when a reason arrives on the highlighted item', async () => {
+    const { rerender } = render(<Menu blocked={false} />)
+    await userEvent.tab()
+    await userEvent.keyboard('{ArrowDown}')
+    await screen.findByRole('menu')
+    const share = () => screen.getByRole('menuitem', { name: 'Share' })
+    expect(share()).toHaveFocus()
+
+    rerender(<Menu blocked />)
+
+    expect(share()).toHaveAttribute('aria-disabled', 'true')
+    expect(share()).toHaveFocus()
+    expect(share()).toHaveAccessibleDescription(reason)
+
+    rerender(<Menu blocked={false} />)
+
+    expect(share()).toHaveFocus()
+  })
+
+  it('joins the description an asChild child brings', () => {
+    open(
+      <>
+        <span id="hint">Shares the whole folder</span>
+        <DropdownMenu.Item asChild disabledReason={reason}>
+          <div aria-describedby="hint">Share</div>
+        </DropdownMenu.Item>
+      </>,
+    )
+
+    expect(screen.getByRole('menuitem')).toHaveAccessibleDescription(
+      `Shares the whole folder ${reason}`,
+    )
+  })
+
+  it('stretches a blocked item across its row', () => {
+    open(<DropdownMenu.Item disabledReason={reason}>Share</DropdownMenu.Item>)
+
+    // jsdom has no layout: the class that makes the item fill is the claim.
+    expect(document.querySelector('[data-slot="disabled-reason"]')).toHaveClass(
+      'w-full',
+      '*:grow',
+    )
+  })
+})

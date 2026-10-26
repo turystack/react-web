@@ -3,6 +3,23 @@ import { tv } from 'tailwind-variants'
 export const DEFAULT_SECTION_WIDTH = 36
 
 /**
+ * What a component of this package may hand an Input it composes, on top of
+ * the public `InputProps`: a slot class for the root wrapper and the native
+ * field (so a DateInput's field still carries `date-input-root`), and the
+ * native `type` PasswordInput toggles. Never part of the public contract —
+ * a consumer who writes `className` on an Input gets a type error. It reaches
+ * Input only through `ComposedInput` (input.composed.ts), which the package
+ * does not export.
+ */
+export type InputComposition = {
+  fieldClass?: string // internal: extra slot class on the native field
+  rootClass?: string // internal: extra slot class on the root wrapper
+  type?: InputType // internal: native type attribute (PasswordInput)
+}
+
+export type InputType = 'text' | 'password'
+
+/**
  * How long the debounced inputs wait. It was written four times, in four
  * files, as the same literal — which is three chances for one of them to drift
  * and nobody to notice.

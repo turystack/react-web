@@ -1,8 +1,13 @@
 import { Menu } from '@base-ui/react/menu'
-import { isValidElement, type PropsWithChildren } from 'react'
+import { cloneElement, isValidElement, type PropsWithChildren } from 'react'
 import { tv } from 'tailwind-variants'
 import { usePortalContainer } from '@/components/portal-provider'
+import {
+  DisabledReason,
+  describedBy,
+} from '@/components/tooltip/tooltip.composed'
 import { CheckIcon } from '@/internal/icons'
+import { axes } from '@/support/utils'
 import {
   DropdownMenuGroupContext,
   DropdownMenuRadioContext,
@@ -123,32 +128,69 @@ const IN_RADIO_GROUP = {
   inRadioGroup: true,
 }
 
+// A reason blocks an item as surely as `disabled` does. Base UI keeps a
+// disabled item in the arrow-key order and refuses its activation, so the
+// reason only has to add the tooltip and the description.
+const REASON_PLACEMENT = {
+  display: 'block',
+  side: 'right',
+} as const
+
+/** An asChild item's child, read for the description it brings. */
+type DescribedChild = {
+  'aria-describedby'?: string
+}
+
 function DropdownMenuItem({
   asChild,
   children,
   disabled,
+  disabledReason,
   onClick,
   variant = 'default',
 }: PropsWithChildren<DropdownMenuItemProps>) {
   const s = styles({
     variant,
   })
-
-  if (asChild && isValidElement(children)) {
-    return (
-      <Menu.Item
-        className={s.item()}
-        disabled={disabled}
-        onClick={onClick}
-        render={children}
-      />
-    )
-  }
+  const blocked = Boolean(disabled || disabledReason)
 
   return (
-    <Menu.Item className={s.item()} disabled={disabled} onClick={onClick}>
-      {children}
-    </Menu.Item>
+    <DisabledReason {...REASON_PLACEMENT} reason={disabledReason}>
+      {(a11y) =>
+        asChild && isValidElement<DescribedChild>(children) ? (
+          <Menu.Item
+            className={s.item()}
+            {...axes(styles, {
+              variant,
+            })}
+            disabled={blocked}
+            onClick={onClick}
+            // The child's props win over the item's in Base UI's merge, so
+            // its own description is joined here, not left to replace the
+            // reason.
+            render={cloneElement(children, {
+              'aria-describedby': describedBy(
+                children.props['aria-describedby'],
+                a11y['aria-describedby'],
+              ),
+            })}
+            {...a11y}
+          />
+        ) : (
+          <Menu.Item
+            className={s.item()}
+            {...axes(styles, {
+              variant,
+            })}
+            disabled={blocked}
+            onClick={onClick}
+            {...a11y}
+          >
+            {children}
+          </Menu.Item>
+        )
+      }
+    </DisabledReason>
   )
 }
 
@@ -156,23 +198,29 @@ function DropdownMenuCheckboxItem({
   checked,
   children,
   disabled,
+  disabledReason,
   onCheckedChange,
 }: PropsWithChildren<DropdownMenuCheckboxItemProps>) {
   const s = styles()
   return (
-    <Menu.CheckboxItem
-      checked={checked}
-      className={s.checkboxItem()}
-      disabled={disabled}
-      onCheckedChange={onCheckedChange}
-    >
-      <span className={s.indicator()}>
-        <Menu.CheckboxItemIndicator>
-          <CheckIcon />
-        </Menu.CheckboxItemIndicator>
-      </span>
-      {children}
-    </Menu.CheckboxItem>
+    <DisabledReason {...REASON_PLACEMENT} reason={disabledReason} stable>
+      {(a11y) => (
+        <Menu.CheckboxItem
+          checked={checked}
+          className={s.checkboxItem()}
+          disabled={Boolean(disabled || disabledReason)}
+          onCheckedChange={onCheckedChange}
+          {...a11y}
+        >
+          <span className={s.indicator()}>
+            <Menu.CheckboxItemIndicator>
+              <CheckIcon />
+            </Menu.CheckboxItemIndicator>
+          </span>
+          {children}
+        </Menu.CheckboxItem>
+      )}
+    </DisabledReason>
   )
 }
 
@@ -193,19 +241,29 @@ function DropdownMenuRadioGroup({
 function DropdownMenuRadioItem({
   children,
   disabled,
+  disabledReason,
   value,
 }: PropsWithChildren<DropdownMenuRadioItemProps>) {
   useDropdownMenuRadioGroup()
   const s = styles()
   return (
-    <Menu.RadioItem className={s.radioItem()} disabled={disabled} value={value}>
-      <span className={s.indicator()}>
-        <Menu.RadioItemIndicator>
-          <CheckIcon />
-        </Menu.RadioItemIndicator>
-      </span>
-      {children}
-    </Menu.RadioItem>
+    <DisabledReason {...REASON_PLACEMENT} reason={disabledReason}>
+      {(a11y) => (
+        <Menu.RadioItem
+          className={s.radioItem()}
+          disabled={Boolean(disabled || disabledReason)}
+          value={value}
+          {...a11y}
+        >
+          <span className={s.indicator()}>
+            <Menu.RadioItemIndicator>
+              <CheckIcon />
+            </Menu.RadioItemIndicator>
+          </span>
+          {children}
+        </Menu.RadioItem>
+      )}
+    </DisabledReason>
   )
 }
 

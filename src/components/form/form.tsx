@@ -1,18 +1,27 @@
 import { Separator } from '@base-ui/react/separator'
 import {
+  Children,
+  isValidElement,
   type PropsWithChildren,
+  type ReactNode,
   useCallback,
   useEffect,
+  useId,
+  useMemo,
   useRef,
   useState,
 } from 'react'
 import { tv } from 'tailwind-variants'
-import { Label } from '@/components/label'
+import { ComposedLabel } from '@/components/label/label.composed'
 import type { TooltipProps } from '@/components/tooltip'
 import { Tooltip } from '@/components/tooltip'
 import { Info } from '@/internal/icons'
-import { cn } from '@/support/utils'
 
+import {
+  FormFieldContext,
+  type FormFieldContextValue,
+  FormFieldSetContext,
+} from './form.context'
 import type {
   FormFieldGroupProps,
   FormFieldProps,
@@ -27,6 +36,7 @@ import type {
 
 const styles = tv({
   defaultVariants: {
+    gap: 'md',
     invalid: false,
     legendVariant: 'legend',
     separatorSurface: 'background',
@@ -74,6 +84,11 @@ const styles = tv({
     // Fieldset — groups related sections with legend
     fieldSet: 'form-field-set flex flex-col gap-4',
 
+    // The box the floating label is pinned to: the control alone. Pinned to
+    // the field instead, `top-1/2` measured the description and error too,
+    // and a field with helper text rested its label below the input's centre.
+    floatingControl: 'form-floating-control relative [&>label]:w-fit',
+
     floatingLabel: [
       'form-floating-label pointer-events-none absolute top-1/2 left-2.5 z-10 origin-left',
       '-translate-y-1/2 px-1 font-normal text-muted-foreground text-sm',
@@ -83,18 +98,36 @@ const styles = tv({
       'group-data-[filled]/field:top-0 group-data-[filled]/field:bg-background',
       'group-data-[filled]/field:text-xs',
     ],
-    root: 'form',
+    // A form stacks its fields: the vertical rhythm is the form's, so a
+    // screen does not wrap its fields in a Flex to space them.
+    root: 'form flex flex-col',
   },
 
   variants: {
+    // The same scale as Flex's gap.
+    gap: {
+      lg: {
+        root: 'gap-6',
+      },
+      md: {
+        root: 'gap-4',
+      },
+      none: {
+        root: 'gap-0',
+      },
+      sm: {
+        root: 'gap-2',
+      },
+    },
+
     floating: {
       true: {
         field: [
-          'relative',
-          '[&>label]:w-fit',
           '[&_input::placeholder]:opacity-0 [&_textarea::placeholder]:opacity-0',
-          'group-focus-within/field:[&_input::placeholder]:opacity-100',
-          'group-focus-within/field:[&_textarea::placeholder]:opacity-100',
+          // `focus-within`, not `group-focus-within/field`: this is the group
+          // itself, and a group variant only ever reaches its descendants.
+          'focus-within:[&_input::placeholder]:opacity-100',
+          'focus-within:[&_textarea::placeholder]:opacity-100',
         ],
       },
     },
@@ -137,23 +170,74 @@ const styles = tv({
 
 function FormRoot({
   children,
-  className,
+  gap,
+  id,
   onSubmit,
-  ...props
-}: PropsWithChildren<FormProps> & React.ComponentProps<'form'>) {
-  const { root } = styles()
+}: PropsWithChildren<FormProps>) {
+  const { root } = styles({
+    gap,
+  })
 
   return (
-    <form
-      className={root({
-        className,
-      })}
-      onSubmit={onSubmit}
-      {...props}
-    >
+    <form className={root()} id={id} onSubmit={onSubmit}>
       {children}
     </form>
   )
+}
+
+/**
+ * The id a direct child element already carries, so a control the field does
+ * not wire (a native <input id>) keeps its label on the first render too.
+ */
+function childId(children: ReactNode): string | undefined {
+  const only = Children.toArray(children).filter(isValidElement)
+  const first = only.length === 1 ? only[0] : undefined
+  const id = (first?.props as { id?: unknown } | undefined)?.id
+  return typeof id === 'string' && id ? id : undefined
+}
+
+/**
+ * The controls a field wires report the id they rendered; the label follows
+ * the first one. Anything else in the field keeps the legacy target (`name`).
+ * The first control to render also claims the field's generated id, so the
+ * very first render (and a server render) already agrees with the label.
+ */
+function useRegisteredControl() {
+  const controls = useRef<(string | null)[]>([])
+  const [registered, setRegistered] = useState<string | null>()
+  const claimant = useRef<string | null>(null)
+
+  const claimControlId = useCallback((key: string) => {
+    if (claimant.current === null) {
+      claimant.current = key
+    }
+    return claimant.current === key
+  }, [])
+
+  const releaseControlId = useCallback((key: string) => {
+    if (claimant.current === key) {
+      claimant.current = null
+    }
+  }, [])
+
+  const registerControl = useCallback((id: string | null) => {
+    controls.current.push(id)
+    setRegistered(controls.current[0])
+    return () => {
+      const at = controls.current.indexOf(id)
+      if (at >= 0) {
+        controls.current.splice(at, 1)
+      }
+      setRegistered(controls.current[0])
+    }
+  }, [])
+
+  return {
+    claimControlId,
+    registered,
+    registerControl,
+    releaseControlId,
+  }
 }
 
 function FormField({
@@ -169,6 +253,21 @@ function FormField({
   const ref = useRef<HTMLDivElement>(null)
   const [filled, setFilled] = useState(false)
 
+  const baseId = useId()
+  const controlId = `${baseId}-control`
+  const labelId = `${baseId}-label`
+  const descriptionId = description ? `${baseId}-description` : undefined
+  const errorId = error ? `${baseId}-error` : undefined
+  const {
+    claimControlId,
+    registered: registeredId,
+    registerControl,
+    releaseControlId,
+  } = useRegisteredControl()
+
+  const describedBy =
+    [descriptionId, errorId].filter(Boolean).join(' ') || undefined
+
   const syncFilled = useCallback(() => {
     const el = ref.current?.querySelector<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -182,62 +281,112 @@ function FormField({
     }
   }, [labelFloating, syncFilled])
 
-  const { field, fieldDescription, fieldError, floatingLabel } = styles({
+  const {
+    field,
+    fieldDescription,
+    fieldError,
+    floatingControl,
+    floatingLabel,
+  } = styles({
     floating: labelFloating,
     invalid,
   })
 
-  const labelConfig =
-    typeof label === 'string'
-      ? {
-          content: label,
-          htmlFor: name,
-        }
-      : label
-        ? {
-            htmlFor: name,
-            ...label,
-          }
-        : undefined
+  const labelConfig = label
+    ? {
+        ...(typeof label === 'string'
+          ? {
+              content: label,
+            }
+          : label),
+      }
+    : undefined
+
+  // The label's target: an explicit `label.htmlFor`, else the id a wired
+  // control reported (its explicit id or the one generated here) — none when
+  // that control is a group, which names itself with aria-labelledby — else
+  // an id a direct child carries, else the legacy `name`, else the generated id.
+  const htmlFor =
+    labelConfig?.htmlFor ??
+    (registeredId === null
+      ? undefined
+      : (registeredId ?? childId(children) ?? name ?? controlId))
+  const labelTextId = labelConfig ? (labelConfig.id ?? labelId) : undefined
+
+  const context = useMemo<FormFieldContextValue>(
+    () => ({
+      claimControlId,
+      controlId,
+      describedBy,
+      invalid,
+      labelTextId,
+      registerControl,
+      releaseControlId,
+    }),
+    [
+      claimControlId,
+      controlId,
+      describedBy,
+      invalid,
+      labelTextId,
+      registerControl,
+      releaseControlId,
+    ],
+  )
+
+  const renderedLabel = labelConfig && (
+    <ComposedLabel
+      {...labelConfig}
+      className={labelFloating ? floatingLabel() : undefined}
+      htmlFor={htmlFor}
+      id={labelTextId}
+    >
+      {labelConfig.content}
+    </ComposedLabel>
+  )
+
+  const details = (
+    <>
+      {description && (
+        <p className={fieldDescription()} id={descriptionId}>
+          {description}
+        </p>
+      )}
+      {error && (
+        <div className={fieldError()} id={errorId} role="alert">
+          {error}
+        </div>
+      )}
+    </>
+  )
 
   if (labelFloating) {
     return (
-      <div
-        className={field()}
-        data-filled={filled ? '' : undefined}
-        onInput={syncFilled}
-        ref={ref}
-      >
-        {children}
-        {labelConfig && (
-          <Label
-            {...labelConfig}
-            className={cn(floatingLabel(), labelConfig.className)}
-          >
-            {labelConfig.content}
-          </Label>
-        )}
-        {description && <p className={fieldDescription()}>{description}</p>}
-        {error && (
-          <div className={fieldError()} role="alert">
-            {error}
+      <FormFieldContext.Provider value={context}>
+        <div
+          className={field()}
+          data-filled={filled ? '' : undefined}
+          onInput={syncFilled}
+          ref={ref}
+        >
+          <div className={floatingControl()}>
+            {children}
+            {renderedLabel}
           </div>
-        )}
-      </div>
+          {details}
+        </div>
+      </FormFieldContext.Provider>
     )
   }
 
   return (
-    <div className={field()}>
-      {labelConfig && <Label {...labelConfig}>{labelConfig.content}</Label>}
-      {children}
-      {description && <p className={fieldDescription()}>{description}</p>}
-      {error && (
-        <div className={fieldError()} role="alert">
-          {error}
-        </div>
-      )}
-    </div>
+    <FormFieldContext.Provider value={context}>
+      <div className={field()}>
+        {renderedLabel}
+        {children}
+        {details}
+      </div>
+    </FormFieldContext.Provider>
   )
 }
 
@@ -252,6 +401,13 @@ function FormFieldSet({
   tooltip,
 }: PropsWithChildren<FormFieldSetProps>) {
   const { fieldSet, fieldLegend } = styles()
+  const legendId = useId()
+  const fieldSetContext = useMemo(
+    () => ({
+      legendId: legend ? legendId : undefined,
+    }),
+    [legend, legendId],
+  )
 
   const tooltipProps: TooltipProps | undefined =
     typeof tooltip === 'string'
@@ -263,7 +419,7 @@ function FormFieldSet({
   return (
     <fieldset className={fieldSet()}>
       {legend && (
-        <legend className={fieldLegend()}>
+        <legend className={fieldLegend()} id={legendId}>
           {legend}
           {tooltipProps && (
             <Tooltip {...tooltipProps}>
@@ -275,7 +431,9 @@ function FormFieldSet({
           )}
         </legend>
       )}
-      {children}
+      <FormFieldSetContext.Provider value={fieldSetContext}>
+        {children}
+      </FormFieldSetContext.Provider>
     </fieldset>
   )
 }

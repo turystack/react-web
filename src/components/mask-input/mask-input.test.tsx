@@ -216,3 +216,78 @@ describe.each(['default', 'ghost'] as InputVariant[])(
     })
   },
 )
+
+describe('MaskInput contract', () => {
+  it('is named by ariaLabel and carries the form-field attributes', () => {
+    render(
+      <MaskInput
+        aria-describedby="cpf-hint"
+        aria-invalid
+        ariaLabel="CPF"
+        id="cpf"
+        mask="000.000.000-00"
+        name="cpf"
+        required
+      />,
+    )
+
+    const field = screen.getByRole('textbox', { name: 'CPF' })
+    expect(field).toHaveAttribute('id', 'cpf')
+    expect(field).toHaveAttribute('name', 'cpf')
+    expect(field).toHaveAttribute('aria-invalid', 'true')
+    expect(field).toHaveAttribute('aria-describedby', 'cpf-hint')
+    expect(field).toBeRequired()
+  })
+
+  it('never lets a class from outside restyle the field', () => {
+    render(
+      <MaskInput
+        ariaLabel="CPF"
+        // @ts-expect-error — className is not part of the contract
+        className="outside-class"
+        mask="000.000.000-00"
+      />,
+    )
+
+    const field = screen.getByRole('textbox', { name: 'CPF' })
+    expect(field).toHaveClass('input-field')
+    expect(field).not.toHaveClass('outside-class')
+  })
+})
+
+describe('MaskInput data-testid', () => {
+  it('uses the testing handle the consumer gave the field', () => {
+    render(<MaskInput ariaLabel="Code" data-testid="code-field" mask="000" />)
+
+    expect(screen.getByTestId('code-field')).toBe(
+      screen.getByRole('textbox', { name: 'Code' }),
+    )
+    expect(screen.queryByTestId('mask-input-field')).not.toBeInTheDocument()
+  })
+
+  it('keeps its own handle when none is given', () => {
+    render(<MaskInput ariaLabel="Code" mask="000" />)
+
+    expect(screen.getByTestId('mask-input-field')).toBe(
+      screen.getByRole('textbox', { name: 'Code' }),
+    )
+  })
+})
+
+describe('MaskInput axes', () => {
+  it('publishes the resolved defaults on its root', () => {
+    render(<MaskInput mask="000" />)
+    const root = screen.getByTestId('mask-input-root')
+
+    expect(root).toHaveAttribute('data-size', 'md')
+    expect(root).toHaveAttribute('data-variant', 'default')
+  })
+
+  it('publishes an explicit size and variant on its root', () => {
+    render(<MaskInput mask="000" size="sm" variant="ghost" />)
+    const root = screen.getByTestId('mask-input-root')
+
+    expect(root).toHaveAttribute('data-size', 'sm')
+    expect(root).toHaveAttribute('data-variant', 'ghost')
+  })
+})

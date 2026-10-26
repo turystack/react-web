@@ -7,13 +7,14 @@ import {
   subDays,
   subMonths,
 } from 'date-fns'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { tv } from 'tailwind-variants'
 import { Button } from '@/components/button'
 import { Calendar } from '@/components/calendar'
-import { Input } from '@/components/input'
+import { ComposedInput } from '@/components/input/input.composed'
 import type { TuryLabels } from '@/components/labels-provider'
 import { useLabels } from '@/components/labels-provider'
-import { Popover } from '@/components/popover'
+import { ComposedPopover } from '@/components/popover/popover.composed'
 import { CalendarIcon, X } from '@/internal/icons'
 import { cn } from '@/support/utils'
 
@@ -22,6 +23,29 @@ import type {
   DateRangeInputPreset,
   DateRangeInputProps,
 } from './date-range-input.types'
+
+const dateRangeInput = tv({
+  slots: {
+    clearTrigger:
+      'date-range-input-clear-trigger flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
+    openTrigger: [
+      'date-range-input-open-trigger pointer-events-auto flex size-7 cursor-pointer items-center justify-center rounded-md',
+      'text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
+      'disabled:pointer-events-none disabled:cursor-not-allowed',
+    ],
+    root: 'date-range-input-root',
+  },
+  variants: {
+    clearable: {
+      false: { clearTrigger: 'invisible' },
+      true: { clearTrigger: 'visible' },
+    },
+    // The field keeps a focus ring while its picker is on screen.
+    open: {
+      true: { root: 'border-ring ring-3 ring-ring/50' },
+    },
+  },
+})
 
 function createDefaultPresets(
   labels: TuryLabels['dateRangeInput'],
@@ -199,7 +223,6 @@ function getActivePresetKey(
 function DateRangeInput({
   applyLabel,
   cancelLabel,
-  className,
   value,
   defaultValue,
   disabled,
@@ -208,6 +231,7 @@ function DateRangeInput({
   presets,
   showPresets = true,
   size,
+  onClick,
   ...props
 }: DateRangeInputProps) {
   const labels = useLabels()
@@ -219,6 +243,7 @@ function DateRangeInput({
     [labels.dateRangeInput, presets, showPresets],
   )
   const [open, setOpen] = useState(false)
+  const fieldRef = useRef<HTMLInputElement>(null)
   const [internalRange, setInternalRange] = useState<
     DateRange | null | undefined
   >(copyRange(defaultValue))
@@ -235,7 +260,8 @@ function DateRangeInput({
   const isControlled = value !== undefined
   const selectedRange = isControlled ? value : internalRange
   const displayValue = formatRange(selectedRange, labels.common)
-  const hasValue = !!displayValue
+  const clearable = !!displayValue && !disabled
+  const styles = dateRangeInput({ clearable, open })
 
   function commit(range: DateRange | null | undefined) {
     const normalizedRange = normalizeRange(range)
@@ -290,94 +316,116 @@ function DateRangeInput({
     setOpen(false)
   }
 
-  function handleClear(e: React.MouseEvent<HTMLButtonElement>) {
-    e.preventDefault()
-    e.stopPropagation()
+  function handleClear() {
     commit(null)
     setDraftRange(null)
     setActivePresetKey(null)
     setOpen(false)
   }
 
+  /*
+    The calendar button and the clear button are siblings on either side of
+    the field, each a real <button> with its own name — nothing interactive
+    sits inside anything else. The popup is anchored to the field, not to the
+    small button that opens it, so it still opens under the whole field.
+  */
   return (
-    <Popover
-      align="start"
-      content={
-        <div className="date-range-input-popover flex overflow-hidden rounded-[inherit] bg-background">
-          {resolvedPresets.length > 0 && (
-            <div className="date-range-input-preset-list flex min-w-40 flex-col gap-1 border-border border-r p-3">
-              {resolvedPresets.map((preset) => (
-                <button
-                  className={cn(
-                    'date-range-input-preset cursor-pointer rounded-md px-3 py-1.5 text-left text-sm transition-colors',
-                    activePresetKey === preset.key
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                  )}
-                  key={preset.key}
-                  onClick={() => handlePresetClick(preset)}
-                  type="button"
-                >
-                  {preset.label}
-                </button>
-              ))}
+    <ComposedInput
+      {...props}
+      disabled={disabled}
+      fieldClass={styles.root()}
+      leftSection={
+        <ComposedPopover
+          align="start"
+          anchor={fieldRef}
+          asChild
+          content={
+            <div className="date-range-input-popover flex overflow-hidden rounded-[inherit] bg-background">
+              {resolvedPresets.length > 0 && (
+                <div className="date-range-input-preset-list flex min-w-40 flex-col gap-1 border-border border-r p-3">
+                  {resolvedPresets.map((preset) => (
+                    <button
+                      className={cn(
+                        'date-range-input-preset cursor-pointer rounded-md px-3 py-1.5 text-left text-sm transition-colors',
+                        activePresetKey === preset.key
+                          ? 'bg-muted text-foreground'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )}
+                      key={preset.key}
+                      onClick={() => handlePresetClick(preset)}
+                      type="button"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="date-range-input-calendar-panel flex flex-col">
+                <Calendar
+                  className="date-range-input-calendar rounded-none"
+                  mode="range"
+                  month={displayMonth}
+                  onDateChange={handleSelect}
+                  onMonthChange={setDisplayMonth}
+                  selected={draftRange}
+                  size={size}
+                />
+                <div className="date-range-input-actions flex items-center justify-end gap-2 border-border border-t bg-background px-3 py-2">
+                  <Button
+                    disabled={disabled}
+                    onClick={handleCancel}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {cancelLabel ?? labels.common.cancel}
+                  </Button>
+                  <Button disabled={disabled} onClick={handleApply} size="sm">
+                    {applyLabel ?? labels.common.apply}
+                  </Button>
+                </div>
+              </div>
             </div>
-          )}
-          <div className="date-range-input-calendar-panel flex flex-col">
-            <Calendar
-              className="date-range-input-calendar rounded-none"
-              mode="range"
-              month={displayMonth}
-              onDateChange={handleSelect}
-              onMonthChange={setDisplayMonth}
-              selected={draftRange}
-              size={size}
-            />
-            <div className="date-range-input-actions flex items-center justify-end gap-2 border-border border-t bg-background px-3 py-2">
-              <Button
-                disabled={disabled}
-                onClick={handleCancel}
-                size="sm"
-                variant="ghost"
-              >
-                {cancelLabel ?? labels.common.cancel}
-              </Button>
-              <Button disabled={disabled} onClick={handleApply} size="sm">
-                {applyLabel ?? labels.common.apply}
-              </Button>
-            </div>
-          </div>
-        </div>
-      }
-      onOpenChange={handleOpenChange}
-      open={open}
-      popupClassName="overflow-hidden p-0"
-      side="bottom"
-      sideOffset={8}
-    >
-      <Input
-        {...props}
-        className={cn('date-range-input-root', className)}
-        disabled={disabled}
-        leftSection={<CalendarIcon className="date-range-input-icon size-4" />}
-        onClick={() => !disabled && setOpen(true)}
-        placeholder={placeholder}
-        readOnly
-        rightSection={
+          }
+          onOpenChange={handleOpenChange}
+          open={open}
+          popupClassName="date-range-input-popup overflow-hidden p-0"
+          side="bottom"
+          sideOffset={8}
+        >
           <button
-            aria-label={labels.common.clear}
-            className={`date-range-input-clear-trigger cursor-pointer text-muted-foreground hover:text-foreground ${hasValue && !disabled ? 'visible' : 'invisible'}`}
-            onClick={handleClear}
-            tabIndex={hasValue && !disabled ? 0 : -1}
+            aria-label={labels.dateInput.open}
+            className={styles.openTrigger()}
+            disabled={disabled}
             type="button"
           >
-            <X className="date-range-input-clear-icon size-4" />
+            <CalendarIcon className="date-range-input-icon size-4" />
           </button>
+        </ComposedPopover>
+      }
+      onClick={(event) => {
+        // The consumer's handler runs as well, not instead of the opening.
+        onClick?.(event)
+        if (!disabled) {
+          handleOpenChange(true)
         }
-        size={size}
-        value={displayValue}
-      />
-    </Popover>
+      }}
+      placeholder={placeholder}
+      readOnly
+      ref={fieldRef}
+      rightSection={
+        <button
+          aria-label={labels.common.clear}
+          className={styles.clearTrigger()}
+          onClick={handleClear}
+          tabIndex={clearable ? 0 : -1}
+          type="button"
+        >
+          <X className="date-range-input-clear-icon size-4" />
+        </button>
+      }
+      size={size}
+      value={displayValue}
+    />
   )
 }
 

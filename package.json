@@ -66,7 +66,7 @@
   },
   "peerDependencies": {
     "@turystack/react-hooks": "^1.0.0",
-    "@turystack/react-i18n": "^1.0.0",
+    "@turystack/react-i18n": "^1.1.0",
     "@turystack/react-icons": "^1.0.0",
     "react": ">=19",
     "react-dom": ">=19",
@@ -80,7 +80,7 @@
     "@testing-library/user-event": "^14.6.6",
     "@turystack/proof-mode-gates": "^1.0.0",
     "@turystack/react-hooks": "^1.0.0",
-    "@turystack/react-i18n": "^1.0.0",
+    "@turystack/react-i18n": "^1.1.0",
     "@turystack/react-icons": "^1.0.0",
     "@types/node": "^24.12.0",
     "@types/react": "19.2.17",

@@ -15,6 +15,10 @@
  * - Default time is applied when the user picks a date with no time set
  * - Trigger "X" clear button mirrors DateInput; in-popover clear is not
  *   provided
+ * - Like DateInput, a calendar button (`dateInput.open` label; shows
+ *   leftSection when given) sits left of the field and the clear button
+ *   (`dateInput.clear`) right of it: sibling <button>s, nothing interactive
+ *   nested in another. The popup anchors to the whole field
  * - Close triggers: submit (check) button, Enter inside TimeInput, outside
  *   click, Escape. None of them mutate the value (commits already happened
  *   live)
@@ -33,7 +37,7 @@ import type { InputProps } from '@/components/input/input.types'
 
 export type DateTimeInputProps = Omit<
   InputProps,
-  'value' | 'defaultValue' | 'onChange' | 'type' | 'debounce'
+  'value' | 'defaultValue' | 'onChange' | 'debounce'
 > & {
   value?: Date | null // controlled date-time value
   defaultValue?: Date | null // uncontrolled initial value

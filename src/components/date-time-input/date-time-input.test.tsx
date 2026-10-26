@@ -2,6 +2,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { LabelsProvider } from '@/components/labels-provider'
+
 import { DateTimeInput } from './date-time-input'
 
 const JAN_15_1430 = new Date(2026, 0, 15, 14, 30)
@@ -355,10 +357,17 @@ describe('DateTimeInput host props', () => {
     expect(screen.getByRole('grid')).toHaveAccessibleName('September 2025')
   })
 
-  it('keeps the class it was handed', () => {
-    render(<DateTimeInput className="max-w-40" value={null} />)
+  it('marks its field with its own slot class and no class from outside', () => {
+    render(
+      <DateTimeInput
+        // @ts-expect-error — className is not part of the contract
+        className="max-w-40"
+        value={null}
+      />,
+    )
 
-    expect(screen.getByRole('textbox')).toHaveClass('max-w-40')
+    expect(screen.getByRole('textbox')).toHaveClass('date-time-input-root')
+    expect(screen.getByRole('textbox')).not.toHaveClass('max-w-40')
   })
 
   it('takes the sections it was handed over its own', () => {
@@ -386,7 +395,8 @@ describe('DateTimeInput disabled', () => {
     expect(screen.getByRole('textbox')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Clear date' })).toBeDisabled()
 
-    await userEvent.click(screen.getByTestId('popover-trigger'))
+    await userEvent.click(screen.getByRole('textbox'))
+    await userEvent.click(screen.getByRole('button', { name: 'Open calendar' }))
 
     expect(
       screen.queryByRole('button', { name: JAN_20_LABEL }),
@@ -406,5 +416,168 @@ describe.each(['sm', 'md', 'lg'] as const)('DateTimeInput size %s', (size) => {
     await userEvent.click(screen.getByRole('button', { name: JAN_20_LABEL }))
 
     expect(onChange).toHaveBeenCalledWith(new Date(2026, 0, 20, 14, 30, 0))
+  })
+})
+
+const INTERACTIVE =
+  'button, input, select, textarea, a[href], [role="button"], [tabindex]'
+
+describe('DateTimeInput structure', () => {
+  it('nests no interactive element inside another', () => {
+    const { container } = render(<DateTimeInput value={JAN_15_1430} />)
+
+    const controls = [...container.querySelectorAll(INTERACTIVE)]
+    expect(controls.length).toBeGreaterThanOrEqual(3)
+    for (const control of controls) {
+      expect(control.parentElement?.closest(INTERACTIVE)).toBeNull()
+    }
+  })
+
+  it('has no role="button" wrapper around the field', () => {
+    render(<DateTimeInput value={JAN_15_1430} />)
+
+    expect(screen.getByRole('textbox').closest('[role="button"]')).toBeNull()
+  })
+
+  it('puts the calendar button and the clear button on either side of the field', () => {
+    render(<DateTimeInput value={JAN_15_1430} />)
+
+    const openButton = screen.getByRole('button', { name: 'Open calendar' })
+    const clear = screen.getByRole('button', { name: 'Clear date' })
+    const field = screen.getByRole('textbox')
+
+    expect(openButton.tagName).toBe('BUTTON')
+    expect(clear.tagName).toBe('BUTTON')
+    expect(openButton).toHaveAttribute('type', 'button')
+    expect(openButton.contains(field)).toBe(false)
+    expect(clear.contains(field)).toBe(false)
+    expect(openButton.contains(clear)).toBe(false)
+  })
+
+  it('shows the left section it was handed inside the calendar button', () => {
+    render(<DateTimeInput leftSection={<span>when</span>} value={null} />)
+
+    expect(
+      screen.getByRole('button', { name: 'Open calendar' }),
+    ).toHaveTextContent('when')
+  })
+
+  it('disables the calendar button with the field', () => {
+    render(<DateTimeInput disabled value={JAN_15_1430} />)
+
+    expect(screen.getByRole('button', { name: 'Open calendar' })).toBeDisabled()
+  })
+
+  it('tells assistive technology whether the picker is open', async () => {
+    render(<DateTimeInput value={JAN_15_1430} />)
+
+    const openButton = screen.getByRole('button', { name: 'Open calendar' })
+    expect(openButton).toHaveAttribute('aria-expanded', 'false')
+
+    await userEvent.click(openButton)
+
+    expect(openButton).toHaveAttribute('aria-expanded', 'true')
+    expect(
+      screen.getByRole('button', { name: JAN_20_LABEL }),
+    ).toBeInTheDocument()
+  })
+
+  it('rings the field while the picker is on screen', async () => {
+    render(<DateTimeInput value={JAN_15_1430} />)
+
+    expect(screen.getByRole('textbox')).not.toHaveClass('ring-3')
+
+    await open()
+
+    expect(screen.getByRole('textbox')).toHaveClass('ring-3')
+  })
+
+  it('calls the click handler it was handed and still opens', async () => {
+    const onClick = vi.fn()
+    render(<DateTimeInput onClick={onClick} value={JAN_15_1430} />)
+
+    await open()
+
+    expect(onClick).toHaveBeenCalledTimes(1)
+    expect(
+      screen.getByRole('button', { name: JAN_20_LABEL }),
+    ).toBeInTheDocument()
+  })
+
+  it('takes both names from the labels the app provides', () => {
+    render(
+      <LabelsProvider
+        labels={{
+          dateInput: { clear: 'Limpar data', open: 'Abrir calendário' },
+        }}
+      >
+        <DateTimeInput value={JAN_15_1430} />
+      </LabelsProvider>,
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Abrir calendário' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Limpar data' }),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('DateTimeInput keyboard', () => {
+  it('reaches the calendar button, the field and the clear button in order', async () => {
+    render(<DateTimeInput value={JAN_15_1430} />)
+
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'Open calendar' })).toHaveFocus()
+
+    await userEvent.tab()
+    expect(screen.getByRole('textbox')).toHaveFocus()
+
+    await userEvent.tab()
+    expect(screen.getByRole('button', { name: 'Clear date' })).toHaveFocus()
+  })
+
+  it.each([
+    ['Enter', '{Enter}'],
+    ['Space', ' '],
+  ])('opens the picker with %s on the calendar button', async (_key, keys) => {
+    render(<DateTimeInput value={JAN_15_1430} />)
+
+    await userEvent.tab()
+    await userEvent.keyboard(keys)
+
+    expect(
+      await screen.findByRole('button', { name: JAN_20_LABEL }),
+    ).toBeInTheDocument()
+  })
+
+  it('clears with Enter on the clear button without opening the picker', async () => {
+    const onChange = vi.fn()
+    render(<DateTimeInput onChange={onChange} value={JAN_15_1430} />)
+
+    screen.getByRole('button', { name: 'Clear date' }).focus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(onChange).toHaveBeenCalledWith(null)
+    expect(
+      screen.queryByRole('button', { name: JAN_20_LABEL }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('DateTimeInput confirm label', () => {
+  it('names the confirm button from the labels the app provides', async () => {
+    render(
+      <LabelsProvider labels={{ confirm: { confirm: 'Confirmar' } }}>
+        <DateTimeInput value={JAN_15_1430} />
+      </LabelsProvider>,
+    )
+
+    await open()
+
+    expect(
+      screen.getByRole('button', { name: 'Confirmar' }),
+    ).toBeInTheDocument()
   })
 })

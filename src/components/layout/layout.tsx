@@ -1,10 +1,13 @@
 import type { PropsWithChildren } from 'react'
 import { tv } from 'tailwind-variants'
 
+import { LoadingBar } from '@/components/loading-bar'
+
 import { LayoutContent } from './content'
 import { LayoutFooter } from './footer'
 import { LayoutHeader } from './header'
 import { LayoutContext } from './layout.context'
+import { DEFAULT_PADDING } from './layout.gutter'
 import type { LayoutProps } from './layout.types'
 import { LayoutMain } from './main'
 import { Sidebar } from './sidebar'
@@ -27,7 +30,9 @@ const styles = tv({
   },
   variants: {
     mode: {
-      fill: 'h-full flex-1',
+      // `relative` is the loading bar's: off the viewport it is absolute, and
+      // the shell is the box it pins itself to. `inset` is relative already.
+      fill: 'relative h-full flex-1',
       // No height of its own on purpose. The row already stretches it, and a
       // height *and* a margin overflow the wrapper by the margin — which is
       // exactly the 16px the inset variant asks for.
@@ -51,22 +56,56 @@ const styles = tv({
   },
 })
 
+/**
+ * The banner strip. `shrink-0` is the whole job: the root is an
+ * overflow-hidden column of fixed height, so a strip that could shrink would be
+ * squeezed by a tall page — and one that does not leaves the header, main and
+ * footer to share what remains, which is exactly "shell minus banner".
+ */
+const bannerStyles = tv({
+  base: 'layout-banner w-full shrink-0',
+})
+
+/**
+ * Skip links: hidden until one is reached by keyboard, then pinned over the
+ * top corner of the viewport so it does not push the shell down the moment it
+ * appears. Fixed rather than absolute: the root is `overflow-hidden`, and a
+ * fixed box is not clipped by it — nor by the corner of a framed shell, which
+ * is positioned for the loading bar.
+ * The padding is a focus-visible utility too: `not-sr-only` resets padding to
+ * 0 and is emitted after every plain utility, so a plain `px-3` would lose.
+ */
+const skipLinkStyles = tv({
+  slots: {
+    skipLink:
+      'layout-skip-link sr-only rounded-md bg-background font-medium text-foreground text-sm shadow-md outline-none focus-visible:not-sr-only focus-visible:fixed focus-visible:px-3 focus-visible:py-2 focus-visible:top-2 focus-visible:left-2 focus-visible:z-50 focus-visible:ring-3 focus-visible:ring-ring/50',
+    skipLinks: 'layout-skip-links',
+  },
+})
+
 function LayoutRoot({
+  banner,
   children,
   height,
-  padding,
+  loadingBar,
+  padding = DEFAULT_PADDING,
+  skipLinks,
+  variant = 'default',
 }: PropsWithChildren<LayoutProps>) {
+  const skip = skipLinkStyles()
   // Derived, never declared. The old `withSidebar` prop asked a consumer to
   // repeat something the tree already knew, which meant it could disagree with
   // the tree — and a shell that says it has no sidebar while sitting beside one
   // renders at `h-svh` inside an `h-svh` row, so the page grows a second
   // scrollbar and the footer leaves the screen.
   const withSidebar = useOptionalSidebar() !== null
+  const mode = withSidebar ? 'inset' : (height ?? 'viewport')
 
   return (
     <LayoutContext.Provider
       value={{
         padding,
+        variant,
         withSidebar,
       }}
     >
@@ -74,11 +113,40 @@ function LayoutRoot({
         className={styles({
           // Beside a rail the shell *is* the content pane, and how tall it is
           // stops being the consumer's question — so `height` is not consulted.
-          mode: withSidebar ? 'inset' : (height ?? 'viewport'),
+          mode,
         })}
         data-testid="layout-root"
+        data-variant={variant}
         data-with-sidebar={withSidebar || undefined}
       >
+        {skipLinks && skipLinks.length > 0 ? (
+          <div className={skip.skipLinks()} data-testid="layout-skip-links">
+            {skipLinks.map((link) => (
+              <a
+                className={skip.skipLink()}
+                href={link.href}
+                key={`${link.href} ${link.label}`}
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+        ) : null}
+        {loadingBar ? (
+          // Derived like `withSidebar`: the bar belongs to the shell's top
+          // edge. A shell that is the viewport pins it to the viewport; any
+          // other shell — embedded, or the pane beside a rail — to itself, so
+          // it never runs over a box the shell does not own.
+          <LoadingBar
+            {...loadingBar}
+            position={mode === 'viewport' ? 'fixed' : 'absolute'}
+          />
+        ) : null}
+        {banner ? (
+          <div className={bannerStyles()} data-testid="layout-banner">
+            {banner}
+          </div>
+        ) : null}
         {children}
       </div>
     </LayoutContext.Provider>

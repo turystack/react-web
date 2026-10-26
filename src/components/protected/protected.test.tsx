@@ -111,4 +111,98 @@ describe('Protected', () => {
 
     expect(screen.getByTestId('state')).toHaveTextContent('false')
   })
+
+  it('hands a reason to the renderer only when the permission is missing', () => {
+    render(
+      withPermissions(
+        ['user:read'],
+        <>
+          <Protected permissionIds={['user:read']}>
+            {({ reason }) => <Button disabledReason={reason}>Read</Button>}
+          </Protected>
+          <Protected permissionIds={['user:delete']}>
+            {({ reason }) => <Button disabledReason={reason}>Delete</Button>}
+          </Protected>
+        </>,
+      ),
+    )
+
+    const read = screen.getByRole('button', {
+      name: 'Read',
+    })
+    const del = screen.getByRole('button', {
+      name: 'Delete',
+    })
+
+    expect(read).not.toHaveAttribute('aria-disabled')
+    expect(read).not.toHaveAttribute('aria-describedby')
+    expect(del).toHaveAttribute('aria-disabled', 'true')
+    expect(del).toHaveAccessibleDescription(
+      'You do not have permission to do this',
+    )
+  })
+
+  it('answers nothing as denied while the permissions load', () => {
+    render(
+      <ProtectedProvider loading permissions={[]}>
+        <Protected
+          fallback={<span>no access</span>}
+          permissionIds={['user:delete']}
+        >
+          <span>guarded</span>
+        </Protected>
+        <Protected permissionIds={['user:delete']}>
+          {({ loading, reason }) => (
+            <Button disabledReason={reason} loading={loading}>
+              Delete
+            </Button>
+          )}
+        </Protected>
+      </ProtectedProvider>,
+    )
+
+    expect(screen.queryByText('guarded')).not.toBeInTheDocument()
+    expect(screen.queryByText('no access')).not.toBeInTheDocument()
+
+    const button = screen.getByRole('button', {
+      name: 'Delete',
+    })
+    expect(button).toHaveAttribute('aria-busy', 'true')
+    expect(button).not.toHaveAccessibleDescription(
+      'You do not have permission to do this',
+    )
+  })
+
+  it('denies with a reason once the permissions arrive', () => {
+    const tree = (loading: boolean) => (
+      <ProtectedProvider loading={loading} permissions={[]}>
+        <Protected permissionIds={['user:delete']}>
+          {({ loading: pending, reason }) => (
+            <Button disabledReason={reason} loading={pending}>
+              Delete
+            </Button>
+          )}
+        </Protected>
+      </ProtectedProvider>
+    )
+    const { rerender } = render(tree(true))
+
+    rerender(tree(false))
+
+    expect(screen.getByRole('button')).toHaveAccessibleDescription(
+      'You do not have permission to do this',
+    )
+  })
+
+  it('renders a Protected that asks for nothing even while loading', () => {
+    render(
+      <ProtectedProvider loading permissions={[]}>
+        <Protected>
+          <span>always</span>
+        </Protected>
+      </ProtectedProvider>,
+    )
+
+    expect(screen.getByText('always')).toBeInTheDocument()
+  })
 })

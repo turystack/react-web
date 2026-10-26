@@ -10,10 +10,16 @@ import type { ReactNode } from 'react'
  * - Header lays the identity out against the action: breadcrumbs above, then
  *   icon, title and description on one side and whatever you hand it on the
  *   other
- * - Toolbar and Content are slots and take children only
+ * - The header row wraps: when it cannot keep about 16rem for the title block
+ *   beside the action, the action moves to its own line under the title
+ *   rather than squeezing the title and description into a narrow column
+ * - Toolbar and Content are slots: children, plus an `id`
+ * - Header, Toolbar and Content take an `id` that lands on the element, so a
+ *   part can be an in-page anchor target (AnchorNav, `#activity` links) —
+ *   a page with several Content blocks can link to each
  *
  * Implementation:
- * - Header is the only part with props, because its arrangement is fixed;
+ * - Header is the only part with layout props, because its arrangement is fixed;
  *   everything else is composition, so nothing here wraps a component you
  *   could not have placed yourself
  * - Renders no landmark: Layout.Main already is one, and a page inside it is a
@@ -48,10 +54,15 @@ export type PageHeaderProps = {
   title: ReactNode // what this page is (required)
   icon?: ReactNode // mark beside the title, in a tinted square
   description?: ReactNode // one line under the title
-  action?: ReactNode // pushed to the far end of the row
+  action?: ReactNode // pushed to the far end of the row; wraps under the title when the row is too narrow
   breadcrumbs?: PageBreadcrumb[] // the trail above the title
+  id?: string // DOM id, the target of an in-page anchor link
 }
 
-export type PageToolbarProps = {}
+export type PageToolbarProps = {
+  id?: string // DOM id, the target of an in-page anchor link
+}
 
-export type PageContentProps = {}
+export type PageContentProps = {
+  id?: string // DOM id, the target of an in-page anchor link
+}

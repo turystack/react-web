@@ -29,6 +29,21 @@ describe('Flex', () => {
     expect(screen.getByText('Second')).toBeInTheDocument()
   })
 
+  it('carries an id so an in-page link can land on it', () => {
+    render(<Flex id="pricing">Plans</Flex>)
+
+    expect(screen.getByTestId('flex-root')).toHaveAttribute('id', 'pricing')
+    expect(document.getElementById('pricing')).toBe(
+      screen.getByTestId('flex-root'),
+    )
+  })
+
+  it('renders no id when it is not given one', () => {
+    render(<Flex>Plans</Flex>)
+
+    expect(screen.getByTestId('flex-root')).not.toHaveAttribute('id')
+  })
+
   it('renders nothing but the root when it has no children', () => {
     render(<Flex />)
 
@@ -172,5 +187,91 @@ describe.each([true, false])('Flex block %s', (block) => {
     )
 
     expect(screen.getByText('Row content')).toBeInTheDocument()
+  })
+})
+
+describe('Flex responsive show/hide', () => {
+  it.each([
+    ['sm', 'sm:flex'],
+    ['md', 'md:flex'],
+    ['lg', 'lg:flex'],
+    ['xl', 'xl:flex'],
+  ] as const)(
+    'hideBelow="%s" is gone on a phone and a flex row again from %s',
+    (breakpoint, shown) => {
+      render(<Flex hideBelow={breakpoint}>Links</Flex>)
+
+      const row = screen.getByTestId('flex-root').className.split(' ')
+
+      expect(row).toContain('hidden')
+      expect(row).toContain(shown)
+      // `hidden` has to be the base display, not fight a base `flex`.
+      expect(row).not.toContain('flex')
+      expect(row).not.toContain(`${breakpoint}:block`)
+    },
+  )
+
+  it.each([
+    ['sm', 'sm:inline-flex'],
+    ['md', 'md:inline-flex'],
+    ['lg', 'lg:inline-flex'],
+    ['xl', 'xl:inline-flex'],
+  ] as const)(
+    'an inline row hidden below %s comes back inline-flex',
+    (breakpoint, shown) => {
+      render(
+        <Flex hideBelow={breakpoint} inline>
+          Chips
+        </Flex>,
+      )
+
+      const row = screen.getByTestId('flex-root').className.split(' ')
+
+      expect(row).toContain('hidden')
+      expect(row).toContain(shown)
+      expect(row).not.toContain('inline-flex')
+      expect(row).not.toContain(`${breakpoint}:flex`)
+    },
+  )
+
+  it.each([
+    ['sm', 'sm:hidden'],
+    ['md', 'md:hidden'],
+    ['lg', 'lg:hidden'],
+    ['xl', 'xl:hidden'],
+  ] as const)(
+    'hideAbove="%s" keeps its flex display and is gone from %s',
+    (breakpoint, hidden) => {
+      render(<Flex hideAbove={breakpoint}>Menu</Flex>)
+
+      const row = screen.getByTestId('flex-root').className.split(' ')
+
+      expect(row).toContain('flex')
+      expect(row).toContain(hidden)
+      expect(row).not.toContain('hidden')
+    },
+  )
+
+  it('shows only between the two breakpoints when given both', () => {
+    render(
+      <Flex hideAbove="xl" hideBelow="md">
+        Tablet
+      </Flex>,
+    )
+
+    expect(screen.getByTestId('flex-root')).toHaveClass(
+      'hidden',
+      'md:flex',
+      'xl:hidden',
+    )
+  })
+
+  it('is a flex row at every width by default', () => {
+    render(<Flex>Always</Flex>)
+
+    const row = screen.getByTestId('flex-root')
+
+    expect(row).toHaveClass('flex-root', 'flex')
+    expect(row.className).not.toMatch(/hidden/)
   })
 })

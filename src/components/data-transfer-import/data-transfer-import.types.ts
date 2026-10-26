@@ -1,63 +1,75 @@
 /**
  * DataTransferImport
  *
- * Bringing rows in from a file, in the four steps that actually happen.
+ * Bringing rows in from a file, in the steps that actually happen. The file
+ * goes to storage; the browser reads only its head; the worker reads every
+ * row.
  *
  * Behavior:
- * - The file never leaves the browser. It is read locally, mapped and
- *   validated, and what reaches the API is `T[]` — not a bucket key. An import
- *   that fails should fail on line 14, column CPF, before anything was stored
- * - Step one offers the template, generated from the columns themselves, and
- *   names the file once it is chosen
+ * - Step one picks the file. `maxFileSize` and the offered `formats` (`csv` ·
+ *   `json` · `jsonl`, by extension) refuse it before anything is uploaded —
+ *   the size is the only limit, as the presigned upload enforces it too. A
+ *   file taken goes up through `onUpload`, which answers with its
+ *   `storage_key`. The template, generated from the columns, is offered while
+ *   CSV is
+ * - At the same time the browser previews the file: the first 64 KB through
+ *   `File.slice`, with the encoding (BOM, UTF-8, UTF-16LE, Windows-1252), the
+ *   CSV delimiter, the headers and the first rows detected here. Nothing goes
+ *   to the server for it
  * - Step two maps the file's headers onto the columns, guessing by label and
  *   by key first, and shows the first value of each mapped column so a wrong
- *   guess is visible rather than merely possible
- * - Step three validates and says how many rows are ready against how many the
- *   file held. `schema` is a Standard Schema — the feature's own zod schema
- *   drops in — and `onValidate` catches what a per-row schema cannot see
- * - Step four reports what the API did and offers the refused rows back with
- *   the reason on each
- * - CSV is read here; anything else arrives through `parse`, which is also the
- *   seam for a server-side import
+ *   guess is visible rather than merely possible. It does not wait for the
+ *   upload: Import does
+ * - Step three shows the preview rows as mapped. `schema`, a Standard Schema
+ *   (the feature's zod schema drops in), runs on those rows only, as a
+ *   warning — the worker validates every row, and a row that fails becomes a
+ *   `failed` record with its code, never a row that silently disappears
+ * - Import hands `onImport` the `{ storage_key, mapping, format }` the API
+ *   opens a job with, and it answers with the job. The Result step says the
+ *   import keeps running after the surface closes and links to its page
+ *   through `resultLink`; under that it renders `result(job)` — usually
+ *   `DataTransferImport.Records` over the product's polling query. The
+ *   product polls; this component never does
+ * - A refused upload returns to the file step, a refused import to the
+ *   preview, each with the reason
  *
  * Implementation:
  * - Modal or Sheet by `surface`; the title says which entity is arriving
- * - <DataTransferImport columns={columns} entity={{ plural: 'bookings' }} onImport={commit} schema={createBookingSchema} />
+ * - <DataTransferImport columns={columns} entity={{ plural: 'bookings' }} maxFileSize={50_000_000} onImport={start} onUpload={upload} result={(job) => <ImportRecords id={job.data_transfer_job_id} />} resultLink={(job) => <Link to={`/imports/${job.data_transfer_job_id}`}>Open the import</Link>} schema={createBookingSchema} />
  *
- * Dependencies: DataTransfer, Stepper, Select, Table, Stat, FilePicker
+ * Dependencies: DataTransfer, Stepper, Select, Table, Stat, Badge, Loader,
+ * FilePicker, @turystack/react-hooks (DataOutcome)
  */
+
+import type { ReactNode } from 'react'
 
 import type {
   DataTransferColumn,
   DataTransferEntity,
+  DataTransferFormat,
+  DataTransferJobAccepted,
+  DataTransferSize,
   DataTransferSurface,
 } from '@/components/data-transfer/data-transfer.types'
 
-/** One row as it came out of the file: every value still a string. */
+/** One preview row as it came out of the file: every value still a string. */
 export type DataTransferImportRow = Record<string, string>
 
-/** Column key to the file's header, or null when nothing feeds it. */
-export type DataTransferImportMapping = Record<string, string | null>
+/** Column key to the file's header that feeds it; a column left out is not mapped. */
+export type DataTransferImportMapping<T> = Partial<
+  Record<keyof T & string, string>
+>
 
-export type DataTransferImportIssue = {
-  /** Which column, when the problem belongs to one. */
-  field?: string
-  message: string
-  /** 1-based, the way the reader counts lines in their spreadsheet. */
-  row: number
+/** What `onUpload` answers: where the file now is. */
+export type DataTransferImportUpload = {
+  storage_key: string
 }
 
-export type DataTransferImportResult = {
-  created?: number
-  failed?: number
-  /** What the API refused, so the reader can take it back and fix it. */
-  issues?: DataTransferImportIssue[]
-  updated?: number
-}
-
-export type DataTransferImportParsed = {
-  headers: string[]
-  rows: DataTransferImportRow[]
+/** What `onImport` receives: everything the API needs to open the job. */
+export type DataTransferImportRequest<T> = {
+  format: DataTransferFormat
+  mapping: DataTransferImportMapping<T> // column key to the file's header
+  storage_key: string // what `onUpload` answered
 }
 
 /**
@@ -80,23 +92,24 @@ export type StandardSchema<T> = {
 }
 
 export type DataTransferImportProps<T> = {
-  accept?: string // what the picker takes; default CSV
   columns: DataTransferColumn<T>[] // what a row can hold
   defaultOpen?: boolean // uncontrolled initial visibility
   description?: string // overrides what the entity would have said
   entity?: DataTransferEntity // what is arriving, in the reader's words
-  maxRows?: number // refuses a file bigger than the screen was built for
+  formats?: DataTransferFormat[] // which files the picker takes; default all three
+  maxFileSize?: number // in bytes; a bigger file is refused before the upload
   onImport: (
-    rows: T[],
-    meta: { mapping: DataTransferImportMapping; raw: DataTransferImportRow[] },
-  ) => Promise<DataTransferImportResult | undefined> // does the work
+    request: DataTransferImportRequest<T>,
+  ) => Promise<DataTransferJobAccepted> // starts it; answers with the job
   onOpenChange?: (open: boolean) => void // fires when it opens or closes
-  onValidate?: (rows: T[]) => DataTransferImportIssue[] // cross-row rules
+  onUpload: (file: File) => Promise<DataTransferImportUpload> // puts the file in storage
   open?: boolean // controlled visibility
-  parse?: (file: File) => Promise<DataTransferImportParsed> // any format but CSV
-  schema?: StandardSchema<T> // per-row validation, usually the feature's schema
+  result?: (job: DataTransferJobAccepted) => ReactNode // what the Result step shows under the notice
+  resultLink: (job: DataTransferJobAccepted) => ReactNode // the page the import can be found on later
+  schema?: StandardSchema<T> // warns on the preview rows; the worker decides
+  size?: DataTransferSize // how wide the surface is; default md
   surface?: DataTransferSurface // modal or sheet; default sheet
-  templateFileName?: string // what the template downloads as
+  templateFileName?: string // what the CSV template downloads as
   title?: string // overrides what the entity would have said
   trigger?: React.ReactElement // what opens it; its own onClick still fires
 }

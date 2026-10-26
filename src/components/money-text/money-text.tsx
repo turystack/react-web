@@ -88,6 +88,9 @@ function MoneyTextSingle(props: MoneyTextSingleProps) {
   return (
     <FormatterText
       {...props}
+      published={{
+        'data-variant': props.variant ?? 'standard',
+      }}
       testId="money-text"
       text={text ?? props.fallback ?? DEFAULT_FALLBACK}
       tone={toneOf(props.value, props.colored)}
@@ -109,7 +112,16 @@ function MoneyTextRange(props: MoneyTextRangeProps) {
       ? labels.common.upTo(to)
       : (props.fallback ?? DEFAULT_FALLBACK)
 
-  return <FormatterText {...props} testId="money-text" text={text} />
+  return (
+    <FormatterText
+      {...props}
+      published={{
+        'data-variant': props.variant ?? 'standard',
+      }}
+      testId="money-text"
+      text={text}
+    />
+  )
 }
 
 export function MoneyText(props: MoneyTextProps) {

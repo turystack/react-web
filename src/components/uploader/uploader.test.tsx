@@ -228,6 +228,20 @@ describe('Uploader', () => {
     expect(screen.getByTestId('uploader-icon-done')).toBeInTheDocument()
   })
 
+  it('paints the done icon with the success token, not a raw palette', async () => {
+    render(<Uploader handler={makeHandler()} />)
+
+    await userEvent.upload(
+      screen.getByTestId('uploader-input'),
+      makeFile('photo.png'),
+    )
+    await respond(await nextRequest(), 200)
+
+    const done = screen.getByTestId('uploader-icon-done')
+    expect(done).toHaveClass('text-success')
+    expect(done.getAttribute('class')).not.toMatch(/\bemerald-\d/)
+  })
+
   it('reaches the failure icon by the handle the uploader gives it', async () => {
     render(<Uploader handler={makeHandler()} />)
 

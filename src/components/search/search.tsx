@@ -3,7 +3,7 @@ import { tv } from 'tailwind-variants'
 
 import { Badge } from '@/components/badge'
 import { Button } from '@/components/button'
-import { Input } from '@/components/input'
+import { ComposedInput } from '@/components/input/input.composed'
 import { useLabels } from '@/components/labels-provider'
 import { Popover } from '@/components/popover'
 import {
@@ -58,6 +58,44 @@ const styles = tv({
     // count appear, and a button that grows by a badge moves Show more and
     // Reset every time — the same jump the fixed filters are here to stop.
     filtersCount: 'search-filters-count flex w-5 justify-center',
+  },
+})
+
+/**
+ * The grid variant: the same items as a form's filter section.
+ *
+ * The columns answer to the grid's own width through a container query. The
+ * place this variant exists for is a modal or a sheet, and a viewport
+ * breakpoint there reads the screen behind the surface — a 512px modal on a
+ * wide monitor would be asked for four columns of 110px each.
+ */
+const gridStyles = tv({
+  defaultVariants: {
+    columns: 2,
+  },
+  slots: {
+    grid: 'search-grid @container/search-grid flex min-w-0 flex-col gap-3',
+    gridCells: 'search-grid-cells grid grid-cols-1 gap-3',
+    // `min-w-0`, because a grid cell's floor is its content's intrinsic width,
+    // and a Select holding chips would otherwise push its column wider than
+    // its neighbours — the same movement the bar's fixed boxes exist to stop.
+    gridCell: 'search-grid-cell flex min-w-0 flex-col gap-1.5',
+    gridField: 'search-grid-field w-full',
+    gridFooter: 'search-grid-footer flex justify-end',
+  },
+  variants: {
+    columns: {
+      1: {},
+      2: {
+        gridCells: '@sm/search-grid:grid-cols-2',
+      },
+      3: {
+        gridCells: '@sm/search-grid:grid-cols-2 @2xl/search-grid:grid-cols-3',
+      },
+      4: {
+        gridCells: '@sm/search-grid:grid-cols-2 @3xl/search-grid:grid-cols-4',
+      },
+    },
   },
 })
 
@@ -134,10 +172,12 @@ function isActive<T extends Record<string, unknown>>(
 }
 
 function Search<T extends Record<string, unknown> = Record<string, unknown>>({
+  columns = 2,
   filter,
   items = [],
   onReset,
   value,
+  variant = 'bar',
 }: SearchProps<T>) {
   const labels = useLabels()
   const [expanded, setExpanded] = useState(false)
@@ -159,21 +199,76 @@ function Search<T extends Record<string, unknown> = Record<string, unknown>>({
   // to itself, and only the term it started with is visible from here.
   const queryFilled = isFilled(filter?.value ?? filter?.defaultValue)
 
+  function renderQuery(className: string) {
+    return filter === undefined ? null : (
+      <ComposedInput
+        // Named even before anything is typed and after the placeholder goes:
+        // ariaLabel, else the words the placeholder shows.
+        ariaLabel={
+          filter.ariaLabel ?? filter.placeholder ?? labels.search.placeholder
+        }
+        debounce
+        defaultValue={filter.defaultValue}
+        leftSection={<SearchIcon />}
+        loading={filter.loading}
+        onChange={filter.onChange}
+        placeholder={filter.placeholder ?? labels.search.placeholder}
+        rootClass={className}
+        value={filter.value}
+      />
+    )
+  }
+
+  const reset =
+    onReset === undefined ? null : (
+      <Button
+        className="search-reset"
+        disabled={activeCount === 0 && !queryFilled}
+        onClick={onReset}
+        size="sm"
+        variant="ghost"
+      >
+        {labels.search.reset}
+      </Button>
+    )
+
+  if (variant === 'grid') {
+    const { grid, gridCell, gridCells, gridField, gridFooter } = gridStyles({
+      columns,
+    })
+
+    return (
+      <div className={grid()} data-testid="search-root" data-variant="grid">
+        {renderQuery(gridField())}
+
+        <div className={gridCells()} data-testid="search-grid-cells">
+          {items.map((item) => (
+            // A <label> around the field names it — the one way to name a
+            // control this bar does not build. Every field it holds must put
+            // its own control first: NumberInput draws its Decrease button
+            // before the input by CSS order, not by DOM order, for this reason.
+            <label
+              className={gridCell()}
+              data-testid={`search-cell-${item.id}`}
+              key={item.id}
+            >
+              {item.label === undefined ? null : (
+                <span className={filterLabelClass()}>{item.label}</span>
+              )}
+              {item.field}
+            </label>
+          ))}
+        </div>
+
+        {reset === null ? null : <div className={gridFooter()}>{reset}</div>}
+      </div>
+    )
+  }
+
   return (
     <div className={rootClass()} data-testid="search-root">
       <div className={rowClass()} data-testid="search-row">
-        {filter === undefined ? null : (
-          <Input
-            debounce
-            defaultValue={filter.defaultValue}
-            leftSection={<SearchIcon />}
-            loading={filter.loading}
-            onChange={filter.onChange}
-            placeholder={filter.placeholder ?? labels.search.placeholder}
-            rootClassName={fieldClass()}
-            value={filter.value}
-          />
-        )}
+        {renderQuery(fieldClass())}
 
         {inline.map((item) => (
           <RowFilter
@@ -186,6 +281,7 @@ function Search<T extends Record<string, unknown> = Record<string, unknown>>({
 
         {popover.length === 0 ? null : (
           <Popover
+            asChild
             content={
               <Panel
                 items={popover}
@@ -222,17 +318,7 @@ function Search<T extends Record<string, unknown> = Record<string, unknown>>({
           </Button>
         )}
 
-        {onReset === undefined ? null : (
-          <Button
-            className="search-reset"
-            disabled={activeCount === 0 && !queryFilled}
-            onClick={onReset}
-            size="sm"
-            variant="ghost"
-          >
-            {labels.search.reset}
-          </Button>
-        )}
+        {reset}
       </div>
 
       {expanded && expand.length > 0 ? (

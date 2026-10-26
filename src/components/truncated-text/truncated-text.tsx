@@ -1,5 +1,6 @@
 import { tv } from 'tailwind-variants'
 
+import { CopyButton } from '@/components/copy-button'
 import { Tooltip } from '@/components/tooltip'
 
 import type {
@@ -7,16 +8,25 @@ import type {
   TruncatedTextProps,
 } from './truncated-text.types'
 
-const styles = tv({
-  base: 'truncated-text max-w-full overflow-hidden',
+export const styles = tv({
   defaultVariants: {
     lines: 1,
   },
+  slots: {
+    root: 'truncated-text-root inline-flex min-w-0 max-w-full items-center gap-1 align-bottom',
+    text: 'truncated-text-text truncated-text min-w-0 max-w-full overflow-hidden',
+  },
   variants: {
     lines: {
-      1: 'inline-block truncate whitespace-nowrap align-bottom',
-      2: 'line-clamp-2 block whitespace-normal break-words',
-      3: 'line-clamp-3 block whitespace-normal break-words',
+      1: {
+        text: 'inline-block truncate whitespace-nowrap align-bottom',
+      },
+      2: {
+        text: 'line-clamp-2 block whitespace-normal break-words',
+      },
+      3: {
+        text: 'line-clamp-3 block whitespace-normal break-words',
+      },
     },
   },
 })
@@ -54,6 +64,7 @@ function truncateText(
 
 export function TruncatedText({
   component: Component = 'span',
+  copyable = false,
   end,
   lines = 1,
   position,
@@ -70,15 +81,25 @@ export function TruncatedText({
     ? truncateText(text, safePosition, safeStart, safeEnd)
     : text
 
-  return (
+  const { root, text: textSlot } = styles({
+    lines,
+  })
+  const content = (
     <Tooltip content={text}>
-      <Component
-        className={styles({
-          lines,
-        })}
-      >
+      <Component className={textSlot()} data-testid="truncated-text">
         {displayText}
       </Component>
     </Tooltip>
+  )
+
+  if (!copyable) {
+    return content
+  }
+
+  return (
+    <span className={root()} data-testid="truncated-text-root">
+      {content}
+      <CopyButton data-testid="truncated-text-copy" size="xs" value={text} />
+    </span>
   )
 }
